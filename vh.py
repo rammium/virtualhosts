@@ -2,10 +2,29 @@
 import sys
 import os.path
 import subprocess
+import urllib
+import json
 from os import walk
+from distutils.version import LooseVersion
 
-version = "0.1"
+version = "v0.2"
 availableCommands = ['create', 'delete', 'help', 'list']
+
+def update():
+    checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
+    response = urllib.urlopen(checkURL)
+    data = json.loads(response.read())
+
+    newVersion = data["tag_name"]
+    if LooseVersion(version) >= LooseVersion(newVersion):
+        return
+
+    print("Updating virtualhosts script...")
+    if data and data["zipball_url"]:
+        newScript = urllib.urlopen(data["zipball_url"]).read()
+        with open(os.path.realpath(__file__)) as currentScript:
+            currentScript.write(newScript)
+        os.execl(sys.executable, *([sys.executable] + sys.argv))
 
 def help():
     print("Virtualhost Commands:\n")
@@ -20,6 +39,8 @@ def help():
 if os.geteuid() != 0:
     print("Error: This script must run with root privileges!")
     exit(1)
+
+update()
 
 if len(sys.argv) <= 1 or sys.argv[1] == "":
     help()
