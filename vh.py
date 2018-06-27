@@ -9,7 +9,7 @@ import tempfile
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.3"
+version = "v0.4"
 availableCommands = ['create', 'delete', 'help', 'list', 'update', 'version']
 
 def update():
@@ -38,9 +38,10 @@ def update():
         with zipfile.ZipFile(temp.name, "r") as zip_ref:
             zip_ref.extractall(particularTempDir)
 
-        repoNameTempDir = next(os.walk('.'))[1][0]
+        repoNameTempDir = [os.path.join(particularTempDir, o) for o in os.listdir(particularTempDir)
+                           if os.path.isdir(os.path.join(particularTempDir, o))][0]
 
-        with open(particularTempDir + "/" + repoNameTempDir + "/vh.py", "r") as newScriptFile:
+        with open(repoNameTempDir + "/vh.py", "r") as newScriptFile:
             newScript = newScriptFile.read()
 
         with open(os.path.realpath(__file__), "w") as oldScriptFile:
