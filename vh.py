@@ -4,6 +4,7 @@ import os.path
 import subprocess
 from os import walk
 
+version = "0.1"
 availableCommands = ['create', 'delete', 'help', 'list']
 
 def help():
