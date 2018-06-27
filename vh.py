@@ -9,8 +9,8 @@ import tempfile
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.2"
-availableCommands = ['create', 'delete', 'help', 'list']
+version = "v0.3"
+availableCommands = ['create', 'delete', 'help', 'list', 'update', 'version']
 
 def update():
     checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
@@ -19,21 +19,35 @@ def update():
 
     newVersion = data["tag_name"]
     if LooseVersion(version) >= LooseVersion(newVersion):
+        print("You are already running the latest version!")
         return
 
     print("Updating virtualhosts script...")
     if data and data["zipball_url"]:
         newScriptZip = urllib.urlopen(data["zipball_url"]).read()
 
-        temp = tempfile.TemporaryFile()
+        tempDir = tempfile.gettempdir()
+        particularTempDir = tempDir + "/vhupdate" + version
+        if not os.path.exists(particularTempDir):
+            os.makedirs(particularTempDir)
+
+        temp = tempfile.NamedTemporaryFile()
         temp.write(newScriptZip)
         temp.seek(0)
 
-        with zipfile.ZipFile("file.zip", "r") as zip_ref:
-            zip_ref.extractall(os.path.dirname(os.path.realpath(__file__)))
+        with zipfile.ZipFile(temp.name, "r") as zip_ref:
+            zip_ref.extractall(particularTempDir)
+
+        repoNameTempDir = next(os.walk('.'))[1][0]
+
+        with open(particularTempDir + "/" + repoNameTempDir + "/vh.py", "r") as newScriptFile:
+            newScript = newScriptFile.read()
+
+        with open(os.path.realpath(__file__), "w") as oldScriptFile:
+            oldScriptFile.write(newScript)
 
         temp.close()
-        os.execl(sys.executable, *([sys.executable] + sys.argv))
+        print("Script updated from " + version + " to " + newVersion + ".")
 
 def help():
     print("Virtualhost Commands:\n")
@@ -43,13 +57,13 @@ def help():
     print("\t\t\t[-s | --symfony]\tThe document root will have /public appended")
     print("delete <domain>\t\t\t\t\tDeletes the specified virtualhost")
     print("list\t\t\t\t\t\tShows all the created virtualhosts")
+    print("version\t\t\t\t\t\tShows the current and latest script versions")
+    print("update\t\t\t\t\t\tUpdates the script to the latest version")
     print("help\t\t\t\t\t\tShows the available commands")
 
 if os.geteuid() != 0:
     print("Error: This script must run with root privileges!")
     exit(1)
-
-update()
 
 if len(sys.argv) <= 1 or sys.argv[1] == "":
     help()
@@ -66,7 +80,7 @@ if command == "delete" and (len(sys.argv) <= 2 or sys.argv[2] == ""):
     print("Error: You must specify the virtualhost name! Example: vh delete <domain>")
     exit(1)
 
-if sys.argv[1] == "create" and (len(sys.argv) <= 3 or sys.argv[3] == ""):
+if command == "create" and (len(sys.argv) <= 3 or sys.argv[3] == ""):
     print("Error: You must specify the virtualhost name! Example: vh create <path> <domain>")
     help()
     exit(1)
@@ -77,6 +91,18 @@ if len(sys.argv) >= 5 and (sys.argv[4] == "--bedrock" or sys.argv[4] == "-b"):
 
 if len(sys.argv) >= 5 and (sys.argv[4] == "--symfony" or sys.argv[4] == "-s"):
     vhostType = "symfony"
+
+if command == "version":
+    print("Current version: " + version)
+    checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
+    response = urllib.urlopen(checkURL)
+    data = json.loads(response.read())
+    print("Latest version: " + data["tag_name"])
+    exit(0)
+
+if command == "update":
+    update()
+    exit(0)
 
 if command == "help":
     help()
