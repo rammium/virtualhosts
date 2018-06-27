@@ -4,6 +4,8 @@ import os.path
 import subprocess
 import urllib
 import json
+import zipfile
+import tempfile
 from os import walk
 from distutils.version import LooseVersion
 
@@ -21,9 +23,16 @@ def update():
 
     print("Updating virtualhosts script...")
     if data and data["zipball_url"]:
-        newScript = urllib.urlopen(data["zipball_url"]).read()
-        with open(os.path.realpath(__file__)) as currentScript:
-            currentScript.write(newScript)
+        newScriptZip = urllib.urlopen(data["zipball_url"]).read()
+
+        temp = tempfile.TemporaryFile()
+        temp.write(newScriptZip)
+        temp.seek(0)
+
+        with zipfile.ZipFile("file.zip", "r") as zip_ref:
+            zip_ref.extractall(os.path.dirname(os.path.realpath(__file__)))
+
+        temp.close()
         os.execl(sys.executable, *([sys.executable] + sys.argv))
 
 def help():
