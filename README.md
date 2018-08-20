@@ -7,6 +7,7 @@ Features:
 - Generate the .env file for bedrock.
 - List all created virtualhosts.
 - Delete a specific virtualhost and optionally delete the database too.
+- Uses configurable skeleton files for virtualhost config which can be auto updated.
 - Auto updater.
 
 For a list of all available commands run `$ sudo vh -h`.
