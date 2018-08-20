@@ -15,7 +15,7 @@ from shutil import rmtree
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.8"
+version = "v0.9"
 script_config_dir = "/usr/local/etc/virtualhosts"
 script_config_file = "config.ini"
 script_config_path = script_config_dir + "/" + script_config_file
@@ -33,7 +33,9 @@ createparser.add_argument('domain', help='specify the domain (.lo will be append
 createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
 createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
 createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
-createparser.add_argument('-c', '--clone', help='will run the wp clonedev start command', action='store_true')
+createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
+createparser.add_argument('-cd', '--clone-dev', help='will run composer install and the wp clonedev start command', action='store_true')
+createparser.add_argument('-i', '--install', help='will run composer install', action='store_true')
 
 listparser = subparsers.add_parser('list', help='lists all the created virtualhosts')
 
@@ -46,6 +48,7 @@ checkupdateparser = subparsers.add_parser('check-update', help='show the latest 
 deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
 deleteparser.add_argument('virtualhost', help='specify the virtualhost')
 deleteparser.add_argument('-d', '--database', help='will drop the database which has the same name as the domain', action='store_true')
+deleteparser.add_argument('-r', '--remove', help='will remove the whole specified directory')
 
 args = parser.parse_args()
 command = args.command
@@ -150,6 +153,29 @@ if command == "list":
     exit(0)
 
 if command == "create":
+    vhostName = args.domain
+    vhostPath = webroot_path + args.path
+
+    if os.path.exists("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
+        print("Error: A virtualhost with this name already exists!")
+        exit(1)
+
+    if args.clone_repo and os.path.exists(vhostPath):
+        print("Error: The specified path already exists, cannot clone the repository! Path: " + vhostPath)
+        exit(1)
+
+    if args.clone_repo:
+        print("Cloning the repository...")
+        subprocess.check_call(("git clone " + args.clone_repo + " " + vhostPath).split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if args.install and not os.path.exists(vhostPath + "/composer.json"):
+        print("Error: The specified path does not contain a composer.json file, cannot run composer install! Path: " + vhostPath)
+        exit(1)
+
+    if args.install:
+        print("Running composer install...")
+        subprocess.check_call(("composer install").split(), cwd=vhostPath, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
     vhostType = False
 
     if args.symfony:
@@ -158,15 +184,8 @@ if command == "create":
     if args.bedrock:
         vhostType = 'bedrock'
 
-    vhostName = args.domain
-    vhostPath = webroot_path + args.path
-
-    if (args.clone and not args.database) or (args.clone and not args.bedrock):
-        print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags.")
-
-    if os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
-        print("Error: A virtualhost with this name already exists!")
-        exit(1)
+    if (args.clone_dev and not args.database) or (args.clone_dev and not args.bedrock):
+        print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags. Cloning will be skipped.")
 
     print("Creating virtualhost file...")
     skeletonPath = script_config_dir + "/skeletons/skeleton.conf"
@@ -192,9 +211,9 @@ if command == "create":
         subprocess.check_call(("mysqladmin --user=" + mysql_user + " --password=" + mysql_pass + " create " + vhostName).split())
 
         if args.bedrock:
-            if args.clone and not os.path.exists(vhostPath + "/wp-cli/clonedev/command.php"):
-                args.clone = False
-                print("Warning: Development site cannot be cloned because the WP-CLI command was not found.")
+            if args.clone_dev and not os.path.exists(vhostPath + "/wp-cli/clonedev/command.php"):
+                args.clone_dev = False
+                print("Warning: Development site cannot be cloned because the WP-CLI command was not found. Cloning will be skipped.")
 
             print("Generating env file...")
             if os.path.exists(vhostPath + "/.env.example"):
@@ -211,7 +230,7 @@ if command == "create":
             env_contents = env_contents.replace("database_host", mysql_host)
             env_contents = env_contents.replace("example.com", vhostName + ".lo")
 
-            if args.clone:
+            if args.clone_dev:
                 ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
                 ssh_path = ssh_path.replace(" ", "")
                 env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + ssh_alias + ":" + ssh_port + ssh_path_prefix + "/" + ssh_path + "'")
@@ -221,10 +240,9 @@ if command == "create":
 
             os.chown(vhostPath + "/.env", uid, gid)
 
-    if args.clone and args.bedrock and args.database:
+    if args.clone_dev and args.bedrock and args.database:
         print("Cloning development site...")
-        with open(os.devnull, "w") as f:
-            subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhostPath, stdout=f)
+        subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhostPath, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         subprocess.check_call(("wp clonedev start").split(), cwd=vhostPath)
 
     print("Reloading apache (requires sudo access)...")
@@ -250,6 +268,10 @@ if command == "delete":
 
     with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf", "w+") as vhostMainFile:
         vhostMainFile.write(vhostsMainContents)
+
+    if args.remove and os.path.exists(webroot_path + args.remove):
+        print("Removing the specified directory...")
+        rmtree(webroot_path + args.remove)
 
     if args.database:
         print("Dropping the database...")
