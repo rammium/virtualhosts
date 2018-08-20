@@ -14,7 +14,7 @@ from shutil import copyfile
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.5"
+version = "v0.6"
 script_config_dir = "/usr/local/etc/virtualhosts"
 script_config_file = "config.ini"
 script_config_path = script_config_dir + "/" + script_config_file
