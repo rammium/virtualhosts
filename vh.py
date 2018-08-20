@@ -7,10 +7,21 @@ import json
 import zipfile
 import tempfile
 import argparse
+import ConfigParser
+import pwd
+import grp
+from shutil import copyfile
 from os import walk
 from distutils.version import LooseVersion
 
 version = "v0.5"
+script_config_dir = "/usr/local/etc/virtualhosts"
+script_config_file = "config.ini"
+script_config_path = script_config_dir + "/" + script_config_file
+mysql_user = ""
+mysql_pass = ""
+mysql_host = "localhost"
+user_home_dir = os.path.expanduser("~")
 
 parser = argparse.ArgumentParser(version=version)
 subparsers = parser.add_subparsers(dest='command')
@@ -20,7 +31,7 @@ createparser.add_argument('path', help='specify the path')
 createparser.add_argument('domain', help='specify the domain (.lo will be appended)')
 createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
 createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
-# createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
+createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
 
 listparser = subparsers.add_parser('list', help='lists all the created virtualhosts')
 
@@ -30,6 +41,7 @@ checkupdateparser = subparsers.add_parser('check-update', help='show the latest 
 
 deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
 deleteparser.add_argument('virtualhost', help='specify the virtualhost')
+deleteparser.add_argument('-d', '--database', help='will drop the database which has the same name as the domain', action='store_true')
 
 args = parser.parse_args()
 command = args.command
@@ -37,6 +49,29 @@ command = args.command
 if os.geteuid() != 0:
     print("Error: This script must run with root privileges!")
     exit(1)
+
+user_name = ""
+if os.environ.has_key('SUDO_USER'):
+    user_name = os.environ['SUDO_USER']
+else:
+    user_name = os.environ['USER']
+uid = pwd.getpwnam(user_name).pw_uid
+gid = grp.getgrnam("admin").gr_gid
+
+if not os.path.exists(script_config_dir) or not os.path.isdir(script_config_dir):
+    os.makedirs(script_config_dir)
+    os.chown(script_config_dir, uid, gid)
+
+if not os.path.exists(script_config_path) or not os.path.isfile(script_config_path):
+    config = ConfigParser.RawConfigParser()
+    config.add_section("MySQL")
+    config.set("MySQL", "mysql_user", mysql_user)
+    config.set("MySQL", "mysql_pass", mysql_pass)
+    config.set("MySQL", "mysql_host", mysql_host)
+
+    with open(script_config_path, "wb") as configfile:
+        config.write(configfile)
+    os.chown(script_config_path, uid, gid)
 
 if command == "check-update":
     print("Current version: " + version)
@@ -96,6 +131,33 @@ if command == "create":
     with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf", "a+") as vhostMainFile:
         vhostMainFile.write("Include /usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf\n")
 
+    if args.database:
+        subprocess.check_call(("sudo mysqladmin create " + vhostName).split())
+
+        if args.bedrock:
+            if os.path.exists(user_home_dir + "/Sites/" + vhostPath + "/.env.example"):
+                copyfile(user_home_dir + "/Sites/" + vhostPath + "/.env.example",
+                         user_home_dir + "/Sites/" + vhostPath + "/.env")
+
+            config = ConfigParser.RawConfigParser()
+            config.read(script_config_path)
+            mysql_user = config.get("MySQL", "mysql_user")
+            mysql_pass = config.get("MySQL", "mysql_pass")
+            mysql_host = config.get("MySQL", "mysql_host")
+
+            with open(user_home_dir + "/Sites/" + vhostPath + "/.env") as f:
+                env_contents = f.read()
+            env_contents = env_contents.replace("database_name", vhostName)
+            env_contents = env_contents.replace("database_user", mysql_user)
+            env_contents = env_contents.replace("database_password", mysql_pass)
+            env_contents = env_contents.replace("database_host", mysql_host)
+            env_contents = env_contents.replace("example.com", vhostName + ".lo")
+
+            with open(user_home_dir + "/Sites/" + vhostPath + "/.env", "w+") as envFile:
+                envFile.write(env_contents)
+
+            os.chown(user_home_dir + "/Sites/" + vhostPath + "/.env", uid, gid)
+
     subprocess.check_call("sudo apachectl -k restart".split())
 
     print("Virtualhost " + vhostName + ".lo created! Link: http://" + vhostName + ".lo/")
@@ -117,6 +179,9 @@ if command == "delete":
 
     with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf", "w+") as vhostMainFile:
         vhostMainFile.write(vhostsMainContents)
+
+    if args.database:
+        subprocess.check_call(("sudo mysqladmin drop " + vhostName).split())
 
     subprocess.check_call("sudo apachectl -k restart".split())
 
