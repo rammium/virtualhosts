@@ -14,7 +14,7 @@ from shutil import copyfile
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.6"
+version = "v0.7"
 script_config_dir = "/usr/local/etc/virtualhosts"
 script_config_file = "config.ini"
 script_config_path = script_config_dir + "/" + script_config_file
@@ -63,6 +63,7 @@ if not os.path.exists(script_config_dir) or not os.path.isdir(script_config_dir)
     os.chown(script_config_dir, uid, gid)
 
 if not os.path.exists(script_config_path) or not os.path.isfile(script_config_path):
+    print("No config file found. Creating it...")
     config = ConfigParser.RawConfigParser()
     config.add_section("MySQL")
     config.set("MySQL", "mysql_user", mysql_user)
@@ -72,6 +73,32 @@ if not os.path.exists(script_config_path) or not os.path.isfile(script_config_pa
     with open(script_config_path, "wb") as configfile:
         config.write(configfile)
     os.chown(script_config_path, uid, gid)
+    print("Config file created at: " + script_config_path)
+
+if not os.path.exists(script_config_dir + "/skeletons") or not os.path.isdir(script_config_dir + "/skeletons"):
+    os.makedirs(script_config_dir + "/skeletons")
+    os.chown(script_config_dir + "/skeletons", uid, gid)
+
+if not os.path.exists(script_config_dir + "/skeletons/skeleton.conf") or not os.path.isfile(script_config_dir + "/skeletons/skeleton.conf"):
+    print("Updating main skeleton config...")
+    response = urllib.urlopen("https://raw.githubusercontent.com/rammium/virtualhosts/master/skeletons/skeleton.conf")
+    with open(script_config_dir + "/skeletons/skeleton.conf", "w+") as skeletonFile:
+        skeletonFile.write(response.read())
+    os.chown(script_config_dir + "/skeletons/skeleton.conf", uid, gid)
+
+if not os.path.exists(script_config_dir + "/skeletons/skeleton-bedrock.conf") or not os.path.isfile(script_config_dir + "/skeletons/skeleton-bedrock.conf"):
+    print("Updating bedrock skeleton config...")
+    response = urllib.urlopen("https://raw.githubusercontent.com/rammium/virtualhosts/master/skeletons/skeleton-bedrock.conf")
+    with open(script_config_dir + "/skeletons/skeleton-bedrock.conf", "w+") as skeletonFile:
+        skeletonFile.write(response.read())
+    os.chown(script_config_dir + "/skeletons/skeleton-bedrock.conf", uid, gid)
+
+if not os.path.exists(script_config_dir + "/skeletons/skeleton-symfony.conf") or not os.path.isfile(script_config_dir + "/skeletons/skeleton-symfony.conf"):
+    print("Updating symfony skeleton config...")
+    response = urllib.urlopen("https://raw.githubusercontent.com/rammium/virtualhosts/master/skeletons/skeleton-symfony.conf")
+    with open(script_config_dir + "/skeletons/skeleton-symfony.conf", "w+") as skeletonFile:
+        skeletonFile.write(response.read())
+    os.chown(script_config_dir + "/skeletons/skeleton-symfony.conf", uid, gid)
 
 if command == "check-update":
     print("Current version: " + version)
@@ -114,16 +141,18 @@ if command == "create":
         print("Error: A virtualhost with this name already exists!")
         exit(1)
 
-    skeletonPath = "/usr/local/etc/httpd/extra/skeleton.conf"
+    print("Creating virtualhost file...")
+    skeletonPath = script_config_dir + "/skeletons/skeleton.conf"
 
     if vhostType:
-        skeletonPath = "/usr/local/etc/httpd/extra/skeleton-" + vhostType + ".conf"
+        skeletonPath = script_config_dir + "/skeletons/skeleton-" + vhostType + ".conf"
 
     with open(skeletonPath) as f:
         newVhost = f.read()
 
     newVhost = newVhost.replace("%VHOSTNAME%", vhostName)
     newVhost = newVhost.replace("%VHOSTPATH%", vhostPath)
+    newVhost = newVhost.replace("%USERNAME%", user_name)
 
     with open("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf", "w+") as vhostFile:
         vhostFile.write(newVhost)
@@ -132,9 +161,11 @@ if command == "create":
         vhostMainFile.write("Include /usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf\n")
 
     if args.database:
+        print("Creating database...")
         subprocess.check_call(("sudo mysqladmin create " + vhostName).split())
 
         if args.bedrock:
+            print("Generating env file...")
             if os.path.exists(user_home_dir + "/Sites/" + vhostPath + "/.env.example"):
                 copyfile(user_home_dir + "/Sites/" + vhostPath + "/.env.example",
                          user_home_dir + "/Sites/" + vhostPath + "/.env")
@@ -170,6 +201,7 @@ if command == "delete":
         print("Error: A virtualhost with this name does not exist!")
         exit(1)
 
+    print("Deleting virtualhost file...")
     os.remove("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf")
 
     with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf") as vhostMainFile:
@@ -181,6 +213,7 @@ if command == "delete":
         vhostMainFile.write(vhostsMainContents)
 
     if args.database:
+        print("Dropping the database...")
         subprocess.check_call(("sudo mysqladmin drop " + vhostName).split())
 
     subprocess.check_call("sudo apachectl -k restart".split())
