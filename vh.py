@@ -68,9 +68,13 @@ if not os.path.exists(script_config_dir) or not os.path.isdir(script_config_dir)
 
 if not os.path.exists(script_config_path) or not os.path.isfile(script_config_path):
     print("No config file found. Creating it...")
-    config = ConfigParser.RawConfigParser()
+    config = ConfigParser.RawConfigParser(allow_no_value=True)
+    config.add_section("General")
     config.add_section("MySQL")
     config.add_section("WP-CLI")
+    config.set("General", "; For the webroot_path you can use the %HOME_DIR% string which will be replaced with your actual home directory path (example: %HOME_DIR%/Sites/)")
+    config.set("General", "; The webroot_path must end with a slash ('/')")
+    config.set("General", "webroot_path", "%HOME_DIR%/Sites/")
     config.set("MySQL", "mysql_user", mysql_user)
     config.set("MySQL", "mysql_pass", mysql_pass)
     config.set("MySQL", "mysql_host", mysql_host)
@@ -116,6 +120,9 @@ mysql_host = config.get("MySQL", "mysql_host")
 ssh_alias = config.get("WP-CLI", "ssh_alias")
 ssh_port = config.get("WP-CLI", "ssh_port")
 ssh_path_prefix = config.get("WP-CLI", "ssh_path_prefix")
+webroot_path = config.get("General", "webroot_path")
+
+webroot_path = webroot_path.replace("%HOME_DIR%", user_home_dir)
 
 if command == "check-update":
     print("Current version: " + version)
@@ -152,7 +159,7 @@ if command == "create":
         vhostType = 'bedrock'
 
     vhostName = args.domain
-    vhostPath = args.path
+    vhostPath = webroot_path + args.path
 
     if (args.clone and not args.database) or (args.clone and not args.bedrock):
         print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags.")
@@ -186,13 +193,12 @@ if command == "create":
 
         if args.bedrock:
             print("Generating env file...")
-            if os.path.exists(user_home_dir + "/Sites/" + vhostPath + "/.env.example"):
-                copyfile(user_home_dir + "/Sites/" + vhostPath + "/.env.example",
-                         user_home_dir + "/Sites/" + vhostPath + "/.env")
+            if os.path.exists(vhostPath + "/.env.example"):
+                copyfile(vhostPath + "/.env.example", vhostPath + "/.env")
 
             ssh_path = ""
 
-            with open(user_home_dir + "/Sites/" + vhostPath + "/.env") as f:
+            with open(vhostPath + "/.env") as f:
                 env_contents = f.read()
 
             env_contents = env_contents.replace("database_name", vhostName)
@@ -205,14 +211,14 @@ if command == "create":
                 ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
                 env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + ssh_alias + ":" + ssh_port + ssh_path_prefix + "/" + ssh_path + "'")
 
-            with open(user_home_dir + "/Sites/" + vhostPath + "/.env", "w+") as envFile:
+            with open(vhostPath + "/.env", "w+") as envFile:
                 envFile.write(env_contents)
 
-            os.chown(user_home_dir + "/Sites/" + vhostPath + "/.env", uid, gid)
+            os.chown(vhostPath + "/.env", uid, gid)
 
     if args.clone and args.bedrock and args.database:
-        subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=user_home_dir + "/Sites/" + vhostPath)
-        subprocess.check_call(("wp clonedev start").split(), cwd=user_home_dir + "/Sites/" + vhostPath)
+        subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhostPath)
+        subprocess.check_call(("wp clonedev start").split(), cwd=vhostPath)
 
     print("Reloading apache (requires sudo access)...")
     subprocess.check_call("sudo apachectl -k graceful".split())
