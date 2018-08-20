@@ -11,6 +11,7 @@ import ConfigParser
 import pwd
 import grp
 from shutil import copyfile
+from shutil import rmtree
 from os import walk
 from distutils.version import LooseVersion
 
@@ -37,6 +38,8 @@ listparser = subparsers.add_parser('list', help='lists all the created virtualho
 
 updateparser = subparsers.add_parser('update', help='updates the script to the latest version')
 
+skeletonupdateparser = subparsers.add_parser('skeleton-update', help='updates the skeleton files to the latest version')
+
 checkupdateparser = subparsers.add_parser('check-update', help='show the latest version of the script available')
 
 deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
@@ -57,6 +60,10 @@ else:
     user_name = os.environ['USER']
 uid = pwd.getpwnam(user_name).pw_uid
 gid = grp.getgrnam("admin").gr_gid
+
+if command == "skeleton-update":
+    if os.path.exists(script_config_dir + "/skeletons"):
+        rmtree(script_config_dir + "/skeletons")
 
 if not os.path.exists(script_config_dir) or not os.path.isdir(script_config_dir):
     os.makedirs(script_config_dir)
