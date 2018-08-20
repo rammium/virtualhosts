@@ -15,7 +15,7 @@ from shutil import rmtree
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.7"
+version = "v0.8"
 script_config_dir = "/usr/local/etc/virtualhosts"
 script_config_file = "config.ini"
 script_config_path = script_config_dir + "/" + script_config_file
@@ -33,6 +33,7 @@ createparser.add_argument('domain', help='specify the domain (.lo will be append
 createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
 createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
 createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
+createparser.add_argument('-c', '--clone', help='will run the wp clonedev start command', action='store_true')
 
 listparser = subparsers.add_parser('list', help='lists all the created virtualhosts')
 
@@ -48,10 +49,6 @@ deleteparser.add_argument('-d', '--database', help='will drop the database which
 
 args = parser.parse_args()
 command = args.command
-
-if os.geteuid() != 0:
-    print("Error: This script must run with root privileges!")
-    exit(1)
 
 user_name = ""
 if os.environ.has_key('SUDO_USER'):
@@ -73,9 +70,13 @@ if not os.path.exists(script_config_path) or not os.path.isfile(script_config_pa
     print("No config file found. Creating it...")
     config = ConfigParser.RawConfigParser()
     config.add_section("MySQL")
+    config.add_section("WP-CLI")
     config.set("MySQL", "mysql_user", mysql_user)
     config.set("MySQL", "mysql_pass", mysql_pass)
     config.set("MySQL", "mysql_host", mysql_host)
+    config.set("WP-CLI", "ssh_alias", "dresden")
+    config.set("WP-CLI", "ssh_port", "2323")
+    config.set("WP-CLI", "ssh_path_prefix", "/home/wp-dev")
 
     with open(script_config_path, "wb") as configfile:
         config.write(configfile)
@@ -106,6 +107,15 @@ if not os.path.exists(script_config_dir + "/skeletons/skeleton-symfony.conf") or
     with open(script_config_dir + "/skeletons/skeleton-symfony.conf", "w+") as skeletonFile:
         skeletonFile.write(response.read())
     os.chown(script_config_dir + "/skeletons/skeleton-symfony.conf", uid, gid)
+
+config = ConfigParser.RawConfigParser()
+config.read(script_config_path)
+mysql_user = config.get("MySQL", "mysql_user")
+mysql_pass = config.get("MySQL", "mysql_pass")
+mysql_host = config.get("MySQL", "mysql_host")
+ssh_alias = config.get("WP-CLI", "ssh_alias")
+ssh_port = config.get("WP-CLI", "ssh_port")
+ssh_path_prefix = config.get("WP-CLI", "ssh_path_prefix")
 
 if command == "check-update":
     print("Current version: " + version)
@@ -144,6 +154,9 @@ if command == "create":
     vhostName = args.domain
     vhostPath = args.path
 
+    if (args.clone and not args.database) or (args.clone and not args.bedrock):
+        print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags.")
+
     if os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
         print("Error: A virtualhost with this name already exists!")
         exit(1)
@@ -169,7 +182,7 @@ if command == "create":
 
     if args.database:
         print("Creating database...")
-        subprocess.check_call(("sudo mysqladmin create " + vhostName).split())
+        subprocess.check_call(("mysqladmin --user=" + mysql_user + " --password=" + mysql_pass + " create " + vhostName).split())
 
         if args.bedrock:
             print("Generating env file...")
@@ -177,26 +190,32 @@ if command == "create":
                 copyfile(user_home_dir + "/Sites/" + vhostPath + "/.env.example",
                          user_home_dir + "/Sites/" + vhostPath + "/.env")
 
-            config = ConfigParser.RawConfigParser()
-            config.read(script_config_path)
-            mysql_user = config.get("MySQL", "mysql_user")
-            mysql_pass = config.get("MySQL", "mysql_pass")
-            mysql_host = config.get("MySQL", "mysql_host")
+            ssh_path = ""
 
             with open(user_home_dir + "/Sites/" + vhostPath + "/.env") as f:
                 env_contents = f.read()
+
             env_contents = env_contents.replace("database_name", vhostName)
             env_contents = env_contents.replace("database_user", mysql_user)
             env_contents = env_contents.replace("database_password", mysql_pass)
             env_contents = env_contents.replace("database_host", mysql_host)
             env_contents = env_contents.replace("example.com", vhostName + ".lo")
 
+            if args.clone:
+                ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
+                env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + ssh_alias + ":" + ssh_port + ssh_path_prefix + "/" + ssh_path + "'")
+
             with open(user_home_dir + "/Sites/" + vhostPath + "/.env", "w+") as envFile:
                 envFile.write(env_contents)
 
             os.chown(user_home_dir + "/Sites/" + vhostPath + "/.env", uid, gid)
 
-    subprocess.check_call("sudo apachectl -k restart".split())
+    if args.clone and args.bedrock and args.database:
+        subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=user_home_dir + "/Sites/" + vhostPath)
+        subprocess.check_call(("wp clonedev start").split(), cwd=user_home_dir + "/Sites/" + vhostPath)
+
+    print("Reloading apache (requires sudo access)...")
+    subprocess.check_call("sudo apachectl -k graceful".split())
 
     print("Virtualhost " + vhostName + ".lo created! Link: http://" + vhostName + ".lo/")
     exit(0)
@@ -221,9 +240,10 @@ if command == "delete":
 
     if args.database:
         print("Dropping the database...")
-        subprocess.check_call(("sudo mysqladmin drop " + vhostName).split())
+        subprocess.check_call(("mysqladmin --user=" + mysql_user + " --password=" + mysql_pass + " drop " + vhostName).split())
 
-    subprocess.check_call("sudo apachectl -k restart".split())
+    print("Reloading apache (requires sudo access)...")
+    subprocess.check_call("sudo apachectl -k graceful".split())
 
     print("Virtualhost " + vhostName + ".lo deleted!")
     exit(0)
