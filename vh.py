@@ -192,6 +192,10 @@ if command == "create":
         subprocess.check_call(("mysqladmin --user=" + mysql_user + " --password=" + mysql_pass + " create " + vhostName).split())
 
         if args.bedrock:
+            if args.clone and not os.path.exists(vhostPath + "/wp-cli/clonedev/command.php"):
+                args.clone = False
+                print("Warning: Development site cannot be cloned because the WP-CLI command was not found.")
+
             print("Generating env file...")
             if os.path.exists(vhostPath + "/.env.example"):
                 copyfile(vhostPath + "/.env.example", vhostPath + "/.env")
@@ -209,6 +213,7 @@ if command == "create":
 
             if args.clone:
                 ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
+                ssh_path = ssh_path.replace(" ", "")
                 env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + ssh_alias + ":" + ssh_port + ssh_path_prefix + "/" + ssh_path + "'")
 
             with open(vhostPath + "/.env", "w+") as envFile:
@@ -217,7 +222,9 @@ if command == "create":
             os.chown(vhostPath + "/.env", uid, gid)
 
     if args.clone and args.bedrock and args.database:
-        subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhostPath)
+        print("Cloning development site...")
+        with open(os.devnull, "w") as f:
+            subprocess.check_call(("wp core install --url=http://" + vhostName + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhostPath, stdout=f)
         subprocess.check_call(("wp clonedev start").split(), cwd=vhostPath)
 
     print("Reloading apache (requires sudo access)...")
