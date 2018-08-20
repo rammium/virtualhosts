@@ -6,107 +6,44 @@ import urllib
 import json
 import zipfile
 import tempfile
+import argparse
 from os import walk
 from distutils.version import LooseVersion
 
-version = "v0.4"
-availableCommands = ['create', 'delete', 'help', 'list', 'update', 'version']
+version = "v0.5"
 
-def update():
-    checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
-    response = urllib.urlopen(checkURL)
-    data = json.loads(response.read())
+parser = argparse.ArgumentParser(version=version)
+subparsers = parser.add_subparsers(dest='command')
 
-    newVersion = data["tag_name"]
-    if LooseVersion(version) >= LooseVersion(newVersion):
-        print("You are already running the latest version!")
-        return
+createparser = subparsers.add_parser('create', help='creates a virtualhost using the specified domain and the specified path relative to /Users/<user>/Sites/')
+createparser.add_argument('path', help='specify the path')
+createparser.add_argument('domain', help='specify the domain (.lo will be appended)')
+createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
+createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
+# createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
 
-    print("Updating virtualhosts script...")
-    if data and data["zipball_url"]:
-        newScriptZip = urllib.urlopen(data["zipball_url"]).read()
+listparser = subparsers.add_parser('list', help='lists all the created virtualhosts')
 
-        tempDir = tempfile.gettempdir()
-        particularTempDir = tempDir + "/vhupdate" + version
-        if not os.path.exists(particularTempDir):
-            os.makedirs(particularTempDir)
+updateparser = subparsers.add_parser('update', help='updates the script to the latest version')
 
-        temp = tempfile.NamedTemporaryFile()
-        temp.write(newScriptZip)
-        temp.seek(0)
+checkupdateparser = subparsers.add_parser('check-update', help='show the latest version of the script available')
 
-        with zipfile.ZipFile(temp.name, "r") as zip_ref:
-            zip_ref.extractall(particularTempDir)
+deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
+deleteparser.add_argument('virtualhost', help='specify the virtualhost')
 
-        repoNameTempDir = [os.path.join(particularTempDir, o) for o in os.listdir(particularTempDir)
-                           if os.path.isdir(os.path.join(particularTempDir, o))][0]
-
-        with open(repoNameTempDir + "/vh.py", "r") as newScriptFile:
-            newScript = newScriptFile.read()
-
-        with open(os.path.realpath(__file__), "w") as oldScriptFile:
-            oldScriptFile.write(newScript)
-
-        temp.close()
-        print("Script updated from " + version + " to " + newVersion + ".")
-
-def help():
-    print("Virtualhost Commands:\n")
-    print("Command\t\t\tFlag\t\t\tDescription")
-    print("create <path> <domain>\t\t\t\tCreates a virtualhost using the specified domain and the specified path relative to /Users/<user>/Sites/")
-    print("\t\t\t[-b | --bedrock]\tThe document root will have /web appended")
-    print("\t\t\t[-s | --symfony]\tThe document root will have /public appended")
-    print("delete <domain>\t\t\t\t\tDeletes the specified virtualhost")
-    print("list\t\t\t\t\t\tShows all the created virtualhosts")
-    print("version\t\t\t\t\t\tShows the current and latest script versions")
-    print("update\t\t\t\t\t\tUpdates the script to the latest version")
-    print("help\t\t\t\t\t\tShows the available commands")
+args = parser.parse_args()
+command = args.command
 
 if os.geteuid() != 0:
     print("Error: This script must run with root privileges!")
     exit(1)
 
-if len(sys.argv) <= 1 or sys.argv[1] == "":
-    help()
-    exit(1)
-
-command = sys.argv[1]
-
-if command not in availableCommands:
-    print("Error: You must specify a command!")
-    help()
-    exit(1)
-
-if command == "delete" and (len(sys.argv) <= 2 or sys.argv[2] == ""):
-    print("Error: You must specify the virtualhost name! Example: vh delete <domain>")
-    exit(1)
-
-if command == "create" and (len(sys.argv) <= 3 or sys.argv[3] == ""):
-    print("Error: You must specify the virtualhost name! Example: vh create <path> <domain>")
-    help()
-    exit(1)
-
-vhostType = False
-if len(sys.argv) >= 5 and (sys.argv[4] == "--bedrock" or sys.argv[4] == "-b"):
-    vhostType = "bedrock"
-
-if len(sys.argv) >= 5 and (sys.argv[4] == "--symfony" or sys.argv[4] == "-s"):
-    vhostType = "symfony"
-
-if command == "version":
+if command == "check-update":
     print("Current version: " + version)
     checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
     response = urllib.urlopen(checkURL)
     data = json.loads(response.read())
     print("Latest version: " + data["tag_name"])
-    exit(0)
-
-if command == "update":
-    update()
-    exit(0)
-
-if command == "help":
-    help()
     exit(0)
 
 if command == "list":
@@ -127,8 +64,16 @@ if command == "list":
     exit(0)
 
 if command == "create":
-    vhostName = sys.argv[3]
-    vhostPath = sys.argv[2]
+    vhostType = False
+
+    if args.symfony:
+        vhostType = 'symfony'
+
+    if args.bedrock:
+        vhostType = 'bedrock'
+
+    vhostName = args.domain
+    vhostPath = args.path
 
     if os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
         print("Error: A virtualhost with this name already exists!")
@@ -157,10 +102,10 @@ if command == "create":
     exit(0)
 
 if command == "delete":
-    vhostName = sys.argv[2]
+    vhostName = args.virtualhost
 
-    if os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
-        print("Error: A virtualhost with this name already exists!")
+    if not os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf"):
+        print("Error: A virtualhost with this name does not exist!")
         exit(1)
 
     os.remove("/usr/local/etc/httpd/extra/vhosts/" + vhostName + ".lo.conf")
@@ -177,3 +122,41 @@ if command == "delete":
 
     print("Virtualhost " + vhostName + ".lo deleted!")
     exit(0)
+
+if command == "update":
+    checkURL = "https://api.github.com/repos/rammium/virtualhosts/releases/latest"
+    response = urllib.urlopen(checkURL)
+    data = json.loads(response.read())
+
+    newVersion = data["tag_name"]
+    if LooseVersion(version) >= LooseVersion(newVersion):
+        print("You are already running the latest version!")
+        exit(0)
+
+    print("Updating virtualhosts script...")
+    if data and data["zipball_url"]:
+        newScriptZip = urllib.urlopen(data["zipball_url"]).read()
+
+        tempDir = tempfile.gettempdir()
+        particularTempDir = tempDir + "/vhupdate" + version
+        if not os.path.exists(particularTempDir):
+            os.makedirs(particularTempDir)
+
+        temp = tempfile.NamedTemporaryFile()
+        temp.write(newScriptZip)
+        temp.seek(0)
+
+        with zipfile.ZipFile(temp.name, "r") as zip_ref:
+            zip_ref.extractall(particularTempDir)
+
+        repoNameTempDir = [os.path.join(particularTempDir, o) for o in os.listdir(particularTempDir)
+                           if os.path.isdir(os.path.join(particularTempDir, o))][0]
+
+        with open(repoNameTempDir + "/vh.py", "r") as newScriptFile:
+            newScript = newScriptFile.read()
+
+        with open(os.path.realpath(__file__), "w") as oldScriptFile:
+            oldScriptFile.write(newScript)
+
+        temp.close()
+        print("Script updated from " + version + " to " + newVersion + ".")
