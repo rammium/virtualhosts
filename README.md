@@ -5,8 +5,10 @@ Features:
 - Create a database using a simple flag.
 - Support for bedrock and symfony.
 - Generate the .env file for bedrock.
+- Run composer install.
+- Clone a repository.
 - List all created virtualhosts.
-- Delete a specific virtualhost and optionally delete the database too.
+- Delete a specific virtualhost and optionally delete the database and directory too.
 - Uses configurable skeleton files for virtualhost config which can be auto updated.
 - Auto updater.
 
