@@ -84,8 +84,7 @@ class VirtualHosts:
 
     def list(self):
         files = []
-
-        for (dirpath, dirnames, filenames) in walk("/usr/local/etc/httpd/extra/vhosts/"):
+        for (dirpath, dirnames, filenames) in walk(self.config.options["apache_config_dir"] + "extra/vhosts/"):
             files.extend(filenames)
             break
 
@@ -99,15 +98,15 @@ class VirtualHosts:
             print(filenametokens[0])
 
     def create(self):
-        vhost_name = args.domain
-        vhost_path = webroot_path
+        vhost_name = self.args.domain
+        vhost_path = self.config.options["webroot_path"]
 
         if self.args.path:
             vhost_path += self.args.path
         else:
             vhost_path += self.args.domain
 
-        if os.path.exists("/usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf"):
+        if os.path.exists(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf"):
             print("Error: A virtualhost with this name already exists!")
             exit(1)
 
@@ -147,15 +146,15 @@ class VirtualHosts:
         new_vhost = new_vhost.replace("%USERNAME%", self.user.name)
         new_vhost = new_vhost.replace("%HOME_DIR%", self.user.home_dir)
 
-        with open("/usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf", "w+") as vhost_file:
+        with open(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf", "w+") as vhost_file:
             vhost_file.write(new_vhost)
 
-        with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf", "a+") as vhost_main_file:
-            vhost_main_file.write("Include /usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf\n")
+        with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf", "a+") as vhost_main_file:
+            vhost_main_file.write("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf\n")
 
         if self.args.database:
             print("Creating database...")
-            subprocess.check_call(("mysqladmin --user=" + self.options["mysql_user"] + " --password=" + self.options["mysql_pass"] + " create " + vhost_name).split())
+            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " create " + vhost_name).split())
 
             if self.args.bedrock:
                 if self.args.clone_dev and not os.path.exists(vhost_path + "/wp-cli/clonedev/command.php"):
@@ -165,20 +164,23 @@ class VirtualHosts:
                 print("Generating env file...")
                 if os.path.exists(vhost_path + "/.env.example"):
                     copyfile(vhost_path + "/.env.example", vhost_path + "/.env")
+                else:
+                    print("Error: No .env.example file found in " + vhost_path)
+                    exit(1)
 
                 with open(vhost_path + "/.env") as f:
                     env_contents = f.read()
 
                 env_contents = env_contents.replace("database_name", vhost_name)
-                env_contents = env_contents.replace("database_user", self.options["mysql_user"])
-                env_contents = env_contents.replace("database_password", self.options["mysql_pass"])
-                env_contents = env_contents.replace("database_host", self.options["mysql_host"])
+                env_contents = env_contents.replace("database_user", self.config.options["mysql_user"])
+                env_contents = env_contents.replace("database_password", self.config.options["mysql_pass"])
+                env_contents = env_contents.replace("database_host", self.config.options["mysql_host"])
                 env_contents = env_contents.replace("example.com", vhost_name + ".lo")
 
                 if self.args.clone_dev:
                     ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
                     ssh_path = ssh_path.replace(" ", "")
-                    env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + self.options["ssh_alias"] + ":" + self.options["ssh_port"] + self.options["ssh_path_prefix"] + "/" + ssh_path + "'")
+                    env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + self.config.options["ssh_alias"] + ":" + self.config.options["ssh_port"] + self.config.options["ssh_path_prefix"] + "/" + ssh_path + "'")
 
                 with open(vhost_path + "/.env", "w+") as env_file:
                     env_file.write(env_contents)
@@ -191,38 +193,38 @@ class VirtualHosts:
             subprocess.check_call("wp clonedev start".split(), cwd=vhost_path)
 
         print("Reloading apache (requires sudo access)...")
-        subprocess.check_call("sudo apachectl -k graceful".split())
+        subprocess.check_call(self.config.options["apache_reload_command"].split())
 
         print("Virtualhost " + vhost_name + ".lo created! URL: http://" + vhost_name + ".lo/")
 
     def delete(self):
         vhost_name = self.args.virtualhost
 
-        if not os.path.isfile("/usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf"):
+        if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf"):
             print("Error: A virtualhost with this name does not exist!")
             exit(1)
 
         print("Deleting virtualhost file...")
-        os.remove("/usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf")
+        os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf")
 
-        with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf") as vhost_main_file:
+        with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf") as vhost_main_file:
             vhost_main_contents = vhost_main_file.read()
 
-        vhost_main_contents = vhost_main_contents.replace("Include /usr/local/etc/httpd/extra/vhosts/" + vhost_name + ".lo.conf\n", "")
+        vhost_main_contents = vhost_main_contents.replace("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf\n", "")
 
-        with open("/usr/local/etc/httpd/extra/httpd-vhosts.conf", "w+") as vhost_main_file:
+        with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf", "w+") as vhost_main_file:
             vhost_main_file.write(vhost_main_contents)
 
-        if self.args.remove and os.path.exists(self.options["webroot_path"] + self.args.remove):
+        if self.args.remove and os.path.exists(self.config.options["webroot_path"] + self.args.remove):
             print("Removing the specified directory...")
-            rmtree(self.options["webroot_path"] + self.args.remove)
+            rmtree(self.config.options["webroot_path"] + self.args.remove)
 
         if self.args.database:
             print("Dropping the database...")
-            subprocess.check_call(("mysqladmin --user=" + self.options["mysql_user"] + " --password=" + self.options["mysql_pass"] + " drop " + vhost_name).split())
+            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost_name).split())
 
         print("Reloading apache (requires sudo access)...")
-        subprocess.check_call("sudo apachectl -k graceful".split())
+        subprocess.check_call(self.config.options["apache_reload_command"].split())
 
         print("Virtualhost " + vhost_name + ".lo deleted!")
 
@@ -238,7 +240,7 @@ class VirtualHosts:
         print("Updating virtualhosts script...")
         if data and data["zipball_url"]:
             new_script_zip = urllib.urlopen(data["zipball_url"]).read()
-            particular_temp_dir = tempfile.gettempdir() + "/vhupdate" + version
+            particular_temp_dir = tempfile.gettempdir() + "/vhupdate" + self.version
 
             if not os.path.exists(particular_temp_dir):
                 os.makedirs(particular_temp_dir)
@@ -250,7 +252,7 @@ class VirtualHosts:
             with zipfile.ZipFile(temp.name, "r") as zip_ref:
                 zip_ref.extractall(particular_temp_dir)
 
-            repo_temp_dir = [os.path.join(particularTempDir, o) for o in os.listdir(particular_temp_dir)
+            repo_temp_dir = [os.path.join(particular_temp_dir, o) for o in os.listdir(particular_temp_dir)
                                if os.path.isdir(os.path.join(particular_temp_dir, o))][0]
 
             with open(repo_temp_dir + "/vh.py", "r") as new_script_file:
@@ -346,6 +348,8 @@ class ConfigHandler:
         self.options["ssh_port"] = config.get("WP-CLI", "ssh_port")
         self.options["ssh_path_prefix"] = config.get("WP-CLI", "ssh_path_prefix")
         self.options["webroot_path"] = config.get("General", "webroot_path")
+        self.options["apache_config_dir"] = config.get("General", "apache_config_dir")
+        self.options["apache_reload_command"] = config.get("General", "apache_reload_command")
         self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", self.user.home_dir)
 
     def create_config(self):
@@ -354,8 +358,10 @@ class ConfigHandler:
         config.add_section("MySQL")
         config.add_section("WP-CLI")
         config.set("General", "; For the webroot_path you can use the %HOME_DIR% string which will be replaced with your actual home directory path (example: %HOME_DIR%/Sites/)")
-        config.set("General", "; The webroot_path must end with a slash ('/')")
+        config.set("General", "; IMPORTANT: All the paths in this section must end with a slash ('/') and must be absolute paths!")
         config.set("General", "webroot_path", "%HOME_DIR%/Sites/")
+        config.set("General", "apache_config_dir", "/usr/local/etc/httpd/")
+        config.set("General", "apache_reload_command", "sudo apachectl -k graceful")
         config.set("MySQL", "mysql_user", "")
         config.set("MySQL", "mysql_pass", "")
         config.set("MySQL", "mysql_host", "localhost")
@@ -363,8 +369,8 @@ class ConfigHandler:
         config.set("WP-CLI", "ssh_port", "2323")
         config.set("WP-CLI", "ssh_path_prefix", "/home/wp-dev")
 
-        with open(script_config_path, "wb") as configfile:
-            config.write(configfile)
-        os.chown(script_config_path, self.user.uid, self.user.gid)
+        with open(self.path, "wb") as config_file:
+            config.write(config_file)
+        os.chown(self.path, self.user.uid, self.user.gid)
 
 VirtualHosts()
