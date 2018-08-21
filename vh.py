@@ -31,10 +31,10 @@ class VirtualHosts:
         skeletons = ["main", "bedrock", "symfony"]
         self.skeletons = SkeletonHandler(skeletons, self.config.directory_path + "/skeletons", self.user)
         self.handle_command()
-        print("Finished in " + (time.time() - start) + " seconds.")
+        print("Finished in " + str(round(time.time() - start, 3)) + " seconds.")
 
     def init_parsers(self):
-        parser = argparse.ArgumentParser(version=version)
+        parser = argparse.ArgumentParser(version=self.version)
         subparsers = parser.add_subparsers(dest='command')
 
         createparser = subparsers.add_parser('create', help='creates a virtualhost using the specified domain and the specified path relative to /Users/<user>/Sites/')
@@ -68,15 +68,16 @@ class VirtualHosts:
             "delete" : self.delete,
             "update" : self.update,
         }
-        commands[args.command]()
+        commands[self.args.command]()
 
     def skeleton_update(self):
+        print("Updating skeleton configs...")
         if os.path.exists(self.skeletons.path):
             rmtree(self.skeletons.path)
         self.skeletons.update()
 
     def check_update(self):
-        print("Current version: " + version)
+        print("Current version: " + self.version)
         response = urllib.urlopen("https://api.github.com/repos/rammium/virtualhosts/releases/latest")
         data = json.loads(response.read())
         print("Latest version: " + data["tag_name"])
@@ -272,24 +273,23 @@ class SkeletonHandler:
         self.user = user
         self.skeletons = skeletons
 
-        if not os.path.exists(self.path) or not os.path.isdir(self.path):
-            os.makedirs(self.path)
-            os.chown(self.path, self.user.uid, self.user.gid)
-
         self.update()
 
     def add(self, name):
         self.skeletons.append(name)
 
     def update(self):
-        print("Updating skeleton configs...")
+        if not os.path.exists(self.path) or not os.path.isdir(self.path):
+            os.makedirs(self.path)
+            os.chown(self.path, self.user.uid, self.user.gid)
+
         for skeleton in self.skeletons:
             path = self.get_path(skeleton)
 
             if not os.path.exists(path) or not os.path.isfile(path):
                 response = urllib.urlopen("https://raw.githubusercontent.com/rammium/virtualhosts/master/skeletons/skeleton-" + skeleton + ".conf")
-                with open(path, "w+") as skeletonFile:
-                    skeletonFile.write(response.read())
+                with open(path, "w+") as skeleton_file:
+                    skeleton_file.write(response.read())
                 os.chown(path, self.user.uid, self.user.gid)
                 print("- Updated " + skeleton + " skeleton")
 
@@ -310,14 +310,14 @@ class User:
 
     def __init__(self):
         self.name = os.environ['SUDO_USER'] if os.environ.has_key('SUDO_USER') else os.environ['USER']
-        self.uid = pwd.getpwnam(user_name).pw_uid
+        self.uid = pwd.getpwnam(self.name).pw_uid
         self.gid = grp.getgrnam("admin").gr_gid
         self.home_dir = os.path.expanduser("~")
 
 class ConfigHandler:
     directory_path = None
     path = None
-    options = None
+    options = {}
     user = None
 
     def __init__(self, user):
@@ -346,7 +346,7 @@ class ConfigHandler:
         self.options["ssh_port"] = config.get("WP-CLI", "ssh_port")
         self.options["ssh_path_prefix"] = config.get("WP-CLI", "ssh_path_prefix")
         self.options["webroot_path"] = config.get("General", "webroot_path")
-        self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", user_home_dir)
+        self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", self.user.home_dir)
 
     def create_config(self):
         config = ConfigParser.RawConfigParser(allow_no_value=True)
