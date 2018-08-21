@@ -21,6 +21,7 @@ class VirtualHosts:
     user = None
     config = None
     skeletons = None
+    vhosts = None
     version = "v1.0.0"
 
     def __init__(self):
@@ -30,6 +31,7 @@ class VirtualHosts:
         self.config = ConfigHandler(self.user)
         skeletons = ["main", "bedrock", "symfony"]
         self.skeletons = SkeletonHandler(skeletons, self.config.directory_path + "/skeletons", self.user)
+        self.vhosts = VDBHandler(self.user)
         self.handle_command()
         print("Finished in " + str(round(time.time() - start, 3)) + " seconds.")
 
@@ -38,19 +40,23 @@ class VirtualHosts:
         subparsers = parser.add_subparsers(dest='command')
 
         createparser = subparsers.add_parser('create', help='creates a virtualhost using the specified domain and the specified path relative to /Users/<user>/Sites/')
-        createparser.add_argument('domain', help='specify the domain (.lo will be appended)')
+        createparser.add_argument('alias', help='specify the alias')
+        createparser.add_argument('-d', '--domain', help='specify the domain (.lo will be appended), will be the same as alias if not specified')
         createparser.add_argument('-p', '--path', help='specify the path, if not specified, will default to the "$webroot_path/<domain>"')
         createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
         createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
-        createparser.add_argument('-d', '--database', help='will create a database using the domain as the name', action='store_true')
+        createparser.add_argument('-db', '--database', help='will create a database (and use the domain as the name if no name is specified)')
         createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
         createparser.add_argument('-cd', '--clone-dev', help='will run composer install and the wp clonedev start command', action='store_true')
         createparser.add_argument('-i', '--install', help='will run composer install', action='store_true')
 
         deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
-        deleteparser.add_argument('virtualhost', help='specify the virtualhost')
-        deleteparser.add_argument('-d', '--database', help='will drop the database which has the same name as the domain', action='store_true')
-        deleteparser.add_argument('-r', '--remove', help='will remove the whole specified directory')
+        deleteparser.add_argument('alias', help='specify the alias')
+        deleteparser.add_argument('-d', '--database', help='will drop the linked database', action='store_true')
+        deleteparser.add_argument('-r', '--remove', help='will remove the linked directory', action='store_true')
+
+        infoparser = subparsers.add_parser('info', help='lists all the information about a virtualhost')
+        infoparser.add_argument('alias', help='specify the alias')
 
         subparsers.add_parser('list', help='lists all the created virtualhosts')
         subparsers.add_parser('update', help='updates the script to the latest version')
@@ -67,6 +73,7 @@ class VirtualHosts:
             "create" : self.create,
             "delete" : self.delete,
             "update" : self.update,
+            "info" : self.info,
         }
         commands[self.args.command]()
 
@@ -83,31 +90,48 @@ class VirtualHosts:
         print("Latest version: " + data["tag_name"])
 
     def list(self):
-        files = []
-        for (dirpath, dirnames, filenames) in walk(self.config.options["apache_config_dir"] + "extra/vhosts/"):
-            files.extend(filenames)
-            break
-
-        if not len(files):
-            print("No virtualhosts created!")
+        if not self.vhosts.vhosts:
+            print("No virtualhosts created.")
             exit(0)
 
-        print("Created virtualhosts:\n")
-        for file in files:
-            filenametokens = file.split('.')
-            print(filenametokens[0])
+        print("Alias\t\tDomain\t\tType\t\tDatabase\t\tPath")
+        for vhost in self.vhosts.vhosts:
+            print(vhost.alias + "\t\t" + vhost.domain + ".lo\t\t" + vhost.type + "\t\t" + vhost.database + "\t\t" + self.config.options["webroot_path"] + vhost.path)
+
+    def info(self):
+        if not self.vhosts.exists(self.args.alias):
+            print("Error: Alias not found!")
+            exit(1)
+
+        vhost = self.vhosts.get_vhost(self.args.alias)
+        print("Virtualhost '" + vhost.alias + "':")
+        print("Domain: " + vhost.domain + ".lo")
+        print("Type: " + vhost.type)
+        print("Database: " + vhost.database)
+        print("Path: " + self.config.options["webroot_path"] + vhost.path)
+        print("Virtualhost config: " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf")
 
     def create(self):
+        self.args.domain = self.args.domain if self.args.domain else self.args.alias
         vhost_name = self.args.domain
         vhost_path = self.config.options["webroot_path"]
 
+        db_name = ""
+        if self.args.database:
+            db_name = self.args.domain if not self.args.database else self.args.database
+
         if self.args.path:
-            vhost_path += self.args.path
+            vhost_addon_path = self.args.path
         else:
-            vhost_path += self.args.domain
+            vhost_addon_path = self.args.domain
+        vhost_path += vhost_addon_path
+
+        if self.vhosts.exists(self.args.alias):
+            print("Error: A virtualhost with the same alias already exists!")
+            exit(1)
 
         if os.path.exists(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf"):
-            print("Error: A virtualhost with this name already exists!")
+            print("Error: A virtualhost config file with this name already exists!")
             exit(1)
 
         if self.args.clone_repo and os.path.exists(vhost_path):
@@ -134,6 +158,8 @@ class VirtualHosts:
         if self.args.bedrock:
             vhost_type = 'bedrock'
 
+        self.vhosts.add_vhost(Vhost(self.args.alias, vhost_name, vhost_addon_path, vhost_type, db_name))
+
         if (self.args.clone_dev and not self.args.database) or (self.args.clone_dev and not self.args.bedrock):
             print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags. Cloning will be skipped.")
 
@@ -154,7 +180,7 @@ class VirtualHosts:
 
         if self.args.database:
             print("Creating database...")
-            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " create " + vhost_name).split())
+            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " create " + db_name).split())
 
             if self.args.bedrock:
                 if self.args.clone_dev and not os.path.exists(vhost_path + "/wp-cli/clonedev/command.php"):
@@ -171,7 +197,7 @@ class VirtualHosts:
                 with open(vhost_path + "/.env") as f:
                     env_contents = f.read()
 
-                env_contents = env_contents.replace("database_name", vhost_name)
+                env_contents = env_contents.replace("database_name", db_name)
                 env_contents = env_contents.replace("database_user", self.config.options["mysql_user"])
                 env_contents = env_contents.replace("database_password", self.config.options["mysql_pass"])
                 env_contents = env_contents.replace("database_host", self.config.options["mysql_host"])
@@ -198,35 +224,37 @@ class VirtualHosts:
         print("Virtualhost " + vhost_name + ".lo created! URL: http://" + vhost_name + ".lo/")
 
     def delete(self):
-        vhost_name = self.args.virtualhost
+        vhost_name = self.args.alias
+        vhost = self.vhosts.get_vhost(vhost_name)
+        self.vhosts.remove_vhost(vhost_name)
 
-        if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf"):
-            print("Error: A virtualhost with this name does not exist!")
-            exit(1)
+        print("Deleting virtualhost...")
 
-        print("Deleting virtualhost file...")
-        os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf")
+        if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf"):
+            print("Warning: Cannot find the virtualhost config file. Will be skipped.")
+        else:
+            os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf")
 
         with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf") as vhost_main_file:
             vhost_main_contents = vhost_main_file.read()
 
-        vhost_main_contents = vhost_main_contents.replace("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_name + ".lo.conf\n", "")
+        vhost_main_contents = vhost_main_contents.replace("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf\n", "")
 
         with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf", "w+") as vhost_main_file:
             vhost_main_file.write(vhost_main_contents)
 
-        if self.args.remove and os.path.exists(self.config.options["webroot_path"] + self.args.remove):
+        if self.args.remove and os.path.exists(self.config.options["webroot_path"] + vhost.path):
             print("Removing the specified directory...")
-            rmtree(self.config.options["webroot_path"] + self.args.remove)
+            rmtree(self.config.options["webroot_path"] + vhost.path)
 
-        if self.args.database:
+        if self.args.database and vhost.database:
             print("Dropping the database...")
-            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost_name).split())
+            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost.database).split())
 
         print("Reloading apache (requires sudo access)...")
         subprocess.check_call(self.config.options["apache_reload_command"].split())
 
-        print("Virtualhost " + vhost_name + ".lo deleted!")
+        print("Virtualhost " + vhost.domain + ".lo deleted!")
 
     def update(self):
         response = urllib.urlopen("https://api.github.com/repos/rammium/virtualhosts/releases/latest")
@@ -372,5 +400,92 @@ class ConfigHandler:
         with open(self.path, "wb") as config_file:
             config.write(config_file)
         os.chown(self.path, self.user.uid, self.user.gid)
+
+class VDBHandler:
+    directory_path = None
+    path = None
+    user = None
+    vhosts = []
+
+    def __init__(self, user):
+        self.user = user
+        self.directory_path = "/usr/local/etc/virtualhosts"
+        self.path = self.directory_path + "/vhosts_database.ini"
+
+        if not os.path.exists(self.path) or not os.path.isfile(self.path):
+            print("No config file found. Creating it...")
+            self.create_vhosts_database()
+            print("Config file created at: " + self.path)
+
+        self.read_vhosts_database()
+
+    def get_vhost(self, alias):
+        if self.exists(alias):
+            return self.vhosts[self.vhosts.index(alias)]
+        return False
+
+    def exists(self, alias):
+        try:
+            self.vhosts.index(alias)
+        except ValueError:
+            return False
+        return True
+
+    def remove_vhost(self, alias):
+        if not self.exists(alias):
+            print("Error: Alias not found.")
+            exit(1)
+
+        config = ConfigParser.RawConfigParser(allow_no_value=True)
+        config.read(self.path)
+        config.remove_section(alias)
+
+        with open(self.path, "w") as config_file:
+            config.write(config_file)
+
+    def add_vhost(self, vhost):
+        self.vhosts.append(vhost)
+        config = ConfigParser.RawConfigParser(allow_no_value=True)
+        config.add_section(vhost.alias)
+        config.set(vhost.alias, "domain", vhost.domain)
+        config.set(vhost.alias, "path", vhost.path)
+        config.set(vhost.alias, "type", vhost.type)
+        config.set(vhost.alias, "database", vhost.database)
+
+        with open(self.path, "a") as config_file:
+            config.write(config_file)
+
+    def read_vhosts_database(self):
+        config = ConfigParser.RawConfigParser()
+        config.read(self.path)
+
+        for vhost in config.sections():
+            domain = config.get(vhost, "domain")
+            path = config.get(vhost, "path")
+            type = config.get(vhost, "type")
+            database = config.get(vhost, "database")
+            self.vhosts.append(Vhost(vhost, domain, path, type, database))
+
+    def create_vhosts_database(self):
+        f = open(self.path, "w")
+        f.close()
+        os.chown(self.path, self.user.uid, self.user.gid)
+
+class Vhost:
+    alias = None
+    domain = None
+    path = None
+    type = None
+    database = None
+
+    def __init__(self, alias, domain, path, type = "main", database = ""):
+        self.alias = alias
+        self.domain = domain
+        self.path = path
+        self.type = type
+        self.database = database
+
+    def __eq__(self, alias):
+        return self.alias == alias
 
 VirtualHosts()
