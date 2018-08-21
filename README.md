@@ -1,4 +1,4 @@
-# virtualhosts
+# VirtualHosts
 
 Features:
 - Create a virtualhost by specifying a domain and the path to the root.
@@ -15,3 +15,10 @@ Features:
 For a list of all available commands run `$ sudo vh -h`.
 
 For the available flags for a specific command run `$ sudo vh <command> -h`.
+
+## Example installation
+Download the script `vh.py` from https://github.com/rammium/virtualhosts/releases/latest to your home directory.
+
+Run `$ chmod +x ~/vh.py` to make it executable.
+
+Run `$ mv ~/vh.py /usr/local/bin/vh` so you can access it globally using the `$ vh` command.
