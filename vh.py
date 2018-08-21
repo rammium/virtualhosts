@@ -54,6 +54,7 @@ class VirtualHosts:
         deleteparser.add_argument('alias', help='specify the alias')
         deleteparser.add_argument('-d', '--database', help='will drop the linked database', action='store_true')
         deleteparser.add_argument('-r', '--remove', help='will remove the linked directory', action='store_true')
+        deleteparser.add_argument('-s', '--skip-db-check', help='will remove the virtualhost config file without checking the vhosts database', action='store_true')
 
         infoparser = subparsers.add_parser('info', help='lists all the information about a virtualhost')
         infoparser.add_argument('alias', help='specify the alias')
@@ -94,9 +95,9 @@ class VirtualHosts:
             print("No virtualhosts created.")
             exit(0)
 
-        print("Alias\t\tDomain\t\tType\t\tDatabase\t\tPath")
+        print("Alias\t\tDomain")
         for vhost in self.vhosts.vhosts:
-            print(vhost.alias + "\t\t" + vhost.domain + ".lo\t\t" + vhost.type + "\t\t" + vhost.database + "\t\t" + self.config.options["webroot_path"] + vhost.path)
+            print(vhost.alias + "\t\t" + vhost.domain + ".lo")
 
     def info(self):
         if not self.vhosts.exists(self.args.alias):
@@ -225,36 +226,41 @@ class VirtualHosts:
 
     def delete(self):
         vhost_name = self.args.alias
-        vhost = self.vhosts.get_vhost(vhost_name)
-        self.vhosts.remove_vhost(vhost_name)
+        vhost_domain = vhost_name
+
+        if not self.args.skip_db_check:
+            vhost = self.vhosts.get_vhost(vhost_name)
+            vhost_domain = vhost.domain
+            self.vhosts.remove_vhost(vhost_name)
 
         print("Deleting virtualhost...")
 
-        if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf"):
+        if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_domain + ".lo.conf"):
             print("Warning: Cannot find the virtualhost config file. Will be skipped.")
         else:
-            os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf")
+            os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_domain + ".lo.conf")
 
         with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf") as vhost_main_file:
             vhost_main_contents = vhost_main_file.read()
 
-        vhost_main_contents = vhost_main_contents.replace("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost.domain + ".lo.conf\n", "")
+        vhost_main_contents = vhost_main_contents.replace("Include " + self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_domain + ".lo.conf\n", "")
 
         with open(self.config.options["apache_config_dir"] + "extra/httpd-vhosts.conf", "w+") as vhost_main_file:
             vhost_main_file.write(vhost_main_contents)
 
-        if self.args.remove and os.path.exists(self.config.options["webroot_path"] + vhost.path):
-            print("Removing the specified directory...")
-            rmtree(self.config.options["webroot_path"] + vhost.path)
+        if not self.args.skip_db_check:
+            if self.args.remove and os.path.exists(self.config.options["webroot_path"] + vhost.path):
+                print("Removing the specified directory...")
+                rmtree(self.config.options["webroot_path"] + vhost.path)
 
-        if self.args.database and vhost.database:
-            print("Dropping the database...")
-            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost.database).split())
+            if self.args.database and vhost.database:
+                print("Dropping the database...")
+                subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost.database).split())
 
         print("Reloading apache (requires sudo access)...")
         subprocess.check_call(self.config.options["apache_reload_command"].split())
 
-        print("Virtualhost " + vhost.domain + ".lo deleted!")
+        print("Virtualhost " + vhost_domain + ".lo deleted!")
 
     def update(self):
         response = urllib.urlopen("https://api.github.com/repos/rammium/virtualhosts/releases/latest")
