@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.0.3"
+    version = "v1.0.4"
 
     def __init__(self):
         start = time.time()
@@ -39,28 +39,28 @@ class VirtualHosts:
         parser = argparse.ArgumentParser(version=self.version)
         subparsers = parser.add_subparsers(dest='command')
 
-        createparser = subparsers.add_parser('create', help='creates a virtualhost using the specified domain and the specified path relative to /Users/<user>/Sites/')
+        createparser = subparsers.add_parser('create', help='creates a new virtualhost')
         createparser.add_argument('alias', help='specify the alias')
         createparser.add_argument('-d', '--domain', help='specify the domain (.lo will be appended), will be the same as alias if not specified')
         createparser.add_argument('-p', '--path', help='specify the path, if not specified, will default to the "$webroot_path/<domain>"')
         createparser.add_argument('-b', '--bedrock', help='will set the root to /web', action='store_true')
         createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
-        createparser.add_argument('-db', '--database', help='will create a database (and use the domain as the name if no name is specified)')
+        createparser.add_argument('-db', '--database', help='will create a database using the specified name')
         createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
-        createparser.add_argument('-cd', '--clone-dev', help='will run composer install and the wp clonedev start command', action='store_true')
-        createparser.add_argument('-i', '--install', help='will run composer install', action='store_true')
+        createparser.add_argument('-cd', '--clone-dev', help='will run the "wp clonedev start" command', action='store_true')
+        createparser.add_argument('-i', '--install', help='will run "composer install"', action='store_true')
 
-        deleteparser = subparsers.add_parser('delete', help='deletes the specified virtualhost')
+        deleteparser = subparsers.add_parser('delete', help='deletes a virtualhost')
         deleteparser.add_argument('alias', help='specify the alias')
         deleteparser.add_argument('-d', '--database', help='will drop the linked database', action='store_true')
         deleteparser.add_argument('-r', '--remove', help='will remove the linked directory', action='store_true')
         deleteparser.add_argument('-s', '--skip-db-check', help='will remove the virtualhost config file without checking the vhosts database', action='store_true')
 
-        infoparser = subparsers.add_parser('info', help='lists all the information about a virtualhost')
+        infoparser = subparsers.add_parser('info', help='lists all stored information about a virtualhost')
         infoparser.add_argument('alias', help='specify the alias')
 
         subparsers.add_parser('list', help='lists all the created virtualhosts')
-        subparsers.add_parser('update', help='updates the script to the latest version')
+        subparsers.add_parser('update', help='updates the script to the latest version (requires root privileges)')
         subparsers.add_parser('skeleton-update', help='updates the skeleton files to the latest version')
         subparsers.add_parser('check-update', help='show the latest version of the script available')
 
@@ -263,6 +263,10 @@ class VirtualHosts:
         print("Virtualhost " + vhost_domain + ".lo deleted!")
 
     def update(self):
+        if os.geteuid() != 0:
+            print("Updating the script requires root privileges. Please run this command using sudo.")
+            exit(1)
+
         response = urllib.urlopen("https://api.github.com/repos/rammium/virtualhosts/releases/latest")
         data = json.loads(response.read())
 
