@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.0.1"
+    version = "v1.0.2"
 
     def __init__(self):
         start = time.time()
@@ -95,9 +95,9 @@ class VirtualHosts:
             print("No virtualhosts created.")
             exit(0)
 
-        print("Alias\t\tDomain")
+        print("Virtualhosts:")
         for vhost in self.vhosts.vhosts:
-            print(vhost.alias + "\t\t" + vhost.domain + ".lo")
+            print(vhost.alias + " -> " + vhost.domain + ".lo")
 
     def info(self):
         if not self.vhosts.exists(self.args.alias):
