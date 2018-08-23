@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.0.4"
+    version = "v1.1.0"
 
     def __init__(self):
         start = time.time()
@@ -63,6 +63,7 @@ class VirtualHosts:
         subparsers.add_parser('update', help='updates the script to the latest version (requires root privileges)')
         subparsers.add_parser('skeleton-update', help='updates the skeleton files to the latest version')
         subparsers.add_parser('check-update', help='show the latest version of the script available')
+        subparsers.add_parser('reconfig', help='recreates the config file. WARNING: will delete your current config file!')
 
         self.args = parser.parse_args()
 
@@ -75,8 +76,18 @@ class VirtualHosts:
             "delete" : self.delete,
             "update" : self.update,
             "info" : self.info,
+            "reconfig" : self.reconfig,
         }
         commands[self.args.command]()
+
+    def reconfig(self):
+        answer = raw_input("Are you sure you want to overwrite your current config file with the default one? [y/N]: ")
+
+        if not (answer == "y" or answer == "Y"):
+            print("Aborted.")
+            exit(0)
+
+        self.config.create_config()
 
     def skeleton_update(self):
         print("Updating skeleton configs...")
