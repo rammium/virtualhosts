@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.1.0"
+    version = "v1.1.1"
 
     def __init__(self):
         start = time.time()
@@ -216,8 +216,16 @@ class VirtualHosts:
                 env_contents = env_contents.replace("example.com", vhost_name + ".lo")
 
                 if self.args.clone_dev:
-                    ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
-                    ssh_path = ssh_path.replace(" ", "")
+                    ssh_path_flag = True
+                    while ssh_path_flag:
+                        ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
+                        ssh_path = ssh_path.replace(" ", "")
+
+                        ssh_path_ok = raw_input("Is '" + ssh_path + "' correct? [Y/n]: ")
+
+                        if ssh_path_ok == "y" or ssh_path_ok == "Y" or ssh_path_ok == "":
+                            ssh_path_flag = False
+
                     env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + self.config.options["ssh_alias"] + ":" + self.config.options["ssh_port"] + self.config.options["ssh_path_prefix"] + "/" + ssh_path + "'")
 
                 with open(vhost_path + "/.env", "w+") as env_file:
