@@ -35,6 +35,7 @@ class VirtualHostsGui:
     text = None
     cloneWindow = None
     config_path = "/usr/local/etc/virtualhosts/config.ini"
+    current = None
 
     def __init__(self):
         self.homeDir = os.path.expanduser("~")
@@ -51,6 +52,11 @@ class VirtualHostsGui:
         self.window.title("VirtualHosts")
         self.window.geometry("700x495")
         self.window.resizable(0, 0)
+        ws = self.window.winfo_screenwidth()
+        hs = self.window.winfo_screenheight()
+        x = (ws / 2) - (700 / 2)
+        y = (hs / 2) - (495 / 2)
+        self.window.geometry('+%d+%d' % (x, y))
         self.list = Listbox(self.window, width=20, height=29, font='Helvetica 14')
         self.list.bind("<<ListboxSelect>>", self.on_select)
 
@@ -90,17 +96,23 @@ class VirtualHostsGui:
         self.window.mainloop()
 
     def clone(self):
-        if not self.list.curselection():
+        if not self.current:
             return
 
         self.cloneWindow = Tkinter.Tk()
         self.cloneWindow.title("Cloning...")
         self.cloneWindow.resizable(0, 0)
+        self.cloneWindow.geometry("500x300")
+        ws = self.cloneWindow.winfo_screenwidth()
+        hs = self.cloneWindow.winfo_screenheight()
+        x = (ws / 2) - (500 / 2)
+        y = (hs / 2) - (300 / 2)
+        self.cloneWindow.geometry('+%d+%d' % (x, y))
         self.cloneWindow.protocol("WM_DELETE_WINDOW", self.quit)
         self.text = Text(self.cloneWindow)
         self.text.pack()
 
-        index = int(self.list.curselection()[0])
+        index = self.current
         domain = self.devs[index]["alias"].replace("_", "-")
         path = self.pathEntry.get().replace(" ", "_")
         database = self.devs[index]["alias"]
@@ -108,9 +120,12 @@ class VirtualHostsGui:
         alias = self.devs[index]["alias"]
         dev_url = self.devs[index]["url"]
 
-        self.vh = subprocess.Popen(("vh create " + alias + " -d " + domain + " -p " + path + " -db " + database + " -cr " + repo + " -b -cd " + dev_url + " -i -sr").split(), stdout=subprocess.PIPE)
+        command = "vh create " + alias + " -d " + domain + " -p " + path + " -db " + database + " -cr " + repo + " -b -cd " + dev_url + " -i -sr"
+        self.vh = subprocess.Popen(command.split(), stdout=subprocess.PIPE, bufsize=1)
 
-        q = Queue(maxsize=1024)
+        self.text.insert(INSERT, "Running '" + command + "'...\n")
+
+        q = Queue()
         t = Thread(target=self.reader_thread, args=[q])
         t.daemon = True
         t.start()
@@ -136,9 +151,9 @@ class VirtualHostsGui:
 
     def reader_thread(self, q):
         try:
-            with self.vh.stdout as pipe:
-                for line in iter(pipe.readline, b''):
-                    q.put(line)
+            for line in iter(self.vh.stdout.readline, b''):
+                q.put(line)
+            self.vh.stdout.close()
         finally:
             q.put(None)
 
@@ -153,6 +168,7 @@ class VirtualHostsGui:
         self.url.set("Local URL: http://" + self.devs[index]["alias"].replace("_", "-") + ".lo")
         self.pathEntry.delete(0, len(self.pathEntry.get()))
         self.pathEntry.insert(0, self.devs[index]["alias"])
+        self.current = index
 
     def handle_sort(self, elem):
         return elem["name"]

@@ -254,6 +254,10 @@ class VirtualHosts:
         vhost_domain = vhost_name
 
         if not self.args.skip_db_check:
+            if not self.vhosts.exists(vhost_name):
+                print("Error: Alias not found!")
+                exit(1)
+
             vhost = self.vhosts.get_vhost(vhost_name)
             vhost_domain = vhost.domain
             self.vhosts.remove_vhost(vhost_name)
