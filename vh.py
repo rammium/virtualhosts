@@ -60,8 +60,10 @@ class VirtualHosts:
         infoparser = subparsers.add_parser('info', help='lists all stored information about a virtualhost')
         infoparser.add_argument('alias', help='specify the alias')
 
+        updateparser = subparsers.add_parser('update', help='updates the script to the latest version (requires root privileges)')
+        updateparser.add_argument('-f', '--force', help='forces the script to update')
+
         subparsers.add_parser('list', help='lists all the created virtualhosts')
-        subparsers.add_parser('update', help='updates the script to the latest version (requires root privileges)')
         subparsers.add_parser('skeleton-update', help='updates the skeleton files to the latest version')
         subparsers.add_parser('check-update', help='show the latest version of the script available')
         subparsers.add_parser('reconfig', help='recreates the config file. WARNING: will delete your current config file!')
@@ -300,7 +302,7 @@ class VirtualHosts:
         data = json.loads(response.read())
 
         new_version = data["tag_name"]
-        if LooseVersion(self.version) >= LooseVersion(new_version):
+        if LooseVersion(self.version) >= LooseVersion(new_version) and not self.args.force:
             print("You are already running the latest version!")
             exit(0)
 
