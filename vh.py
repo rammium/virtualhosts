@@ -333,7 +333,7 @@ class VirtualHosts:
             with open(os.path.realpath(__file__), "w") as old_script_file:
                 old_script_file.write(new_script)
 
-            with open(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui.py", "w") as old_script_file:
+            with open(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", "w") as old_script_file:
                 old_script_file.write(new_gui_script)
 
             temp.close()
