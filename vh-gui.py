@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import Tkinter
 from Tkinter import *
-import urllib2
+import urllib
 import json
 import ConfigParser
 import os
@@ -44,7 +44,7 @@ class VirtualHostsGui:
             print("Error: 'devs_json_url' not set in " + self.config_path)
             exit(1)
 
-        self.devs = json.loads(urllib2.urlopen(self.options["devs_json_url"]).read())["devs"]
+        self.devs = json.loads(urllib.urlopen(self.options["devs_json_url"]).read())["devs"]
         self.devs.sort(key=self.handle_sort)
 
         self.window = Tkinter.Tk()
