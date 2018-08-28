@@ -419,6 +419,7 @@ class ConfigHandler:
         self.options["webroot_path"] = config.get("General", "webroot_path")
         self.options["apache_config_dir"] = config.get("General", "apache_config_dir")
         self.options["apache_reload_command"] = config.get("General", "apache_reload_command")
+        self.options["devs_json_url"] = config.get("General", "devs_json_url")
         self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", self.user.home_dir)
 
     def create_config(self):
@@ -431,6 +432,7 @@ class ConfigHandler:
         config.set("General", "webroot_path", "%HOME_DIR%/Sites/")
         config.set("General", "apache_config_dir", "/usr/local/etc/httpd/")
         config.set("General", "apache_reload_command", "sudo apachectl -k graceful")
+        config.set("General", "devs_json_url", "")
         config.set("MySQL", "mysql_user", "")
         config.set("MySQL", "mysql_pass", "")
         config.set("MySQL", "mysql_host", "localhost")

@@ -34,11 +34,17 @@ class VirtualHostsGui:
     vh = None
     text = None
     cloneWindow = None
+    config_path = "/usr/local/etc/virtualhosts/config.ini"
 
     def __init__(self):
         self.homeDir = os.path.expanduser("~")
         self.read_config()
-        self.devs = json.loads(urllib2.urlopen("").read())["devs"]
+
+        if not self.options["devs_json_url"]:
+            print("Error: 'devs_json_url' not set in " + self.config_path)
+            exit(1)
+
+        self.devs = json.loads(urllib2.urlopen(self.options["devs_json_url"]).read())["devs"]
         self.devs.sort(key=self.handle_sort)
 
         self.window = Tkinter.Tk()
@@ -150,16 +156,10 @@ class VirtualHostsGui:
 
     def read_config(self):
         config = ConfigParser.RawConfigParser()
-        config.read("/usr/local/etc/virtualhosts/config.ini")
-        self.options["mysql_user"] = config.get("MySQL", "mysql_user")
-        self.options["mysql_pass"] = config.get("MySQL", "mysql_pass")
-        self.options["mysql_host"] = config.get("MySQL", "mysql_host")
-        self.options["ssh_alias"] = config.get("WP-CLI", "ssh_alias")
-        self.options["ssh_port"] = config.get("WP-CLI", "ssh_port")
-        self.options["ssh_path_prefix"] = config.get("WP-CLI", "ssh_path_prefix")
+        config.read(self.config_path)
         self.options["webroot_path"] = config.get("General", "webroot_path")
-        self.options["apache_config_dir"] = config.get("General", "apache_config_dir")
         self.options["apache_reload_command"] = config.get("General", "apache_reload_command")
+        self.options["devs_json_url"] = config.get("General", "devs_json_url")
         self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", self.homeDir)
 
 
