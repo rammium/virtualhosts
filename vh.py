@@ -61,7 +61,7 @@ class VirtualHosts:
         infoparser.add_argument('alias', help='specify the alias')
 
         updateparser = subparsers.add_parser('update', help='updates the script to the latest version (requires root privileges)')
-        updateparser.add_argument('-f', '--force', help='forces the script to update')
+        updateparser.add_argument('-f', '--force', help='forces the script to update', action='store_true')
 
         subparsers.add_parser('list', help='lists all the created virtualhosts')
         subparsers.add_parser('skeleton-update', help='updates the skeleton files to the latest version')
