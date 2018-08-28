@@ -11,10 +11,12 @@ import ConfigParser
 import pwd
 import grp
 import time
+import stat
 from shutil import copyfile
 from shutil import rmtree
 from os import walk
 from distutils.version import LooseVersion
+
 
 class VirtualHosts:
     args = None
@@ -22,7 +24,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.2.2"
+    version = "v1.2.3"
 
     def __init__(self):
         start = time.time()
@@ -337,6 +339,14 @@ class VirtualHosts:
                 old_script_file.write(new_gui_script)
 
             temp.close()
+
+            os.chown(os.path.realpath(__file__), self.user.uid, self.user.gid)
+            os.chown(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", self.user.uid, self.user.gid)
+            st = os.stat(os.path.realpath(__file__))
+            os.chmod(os.path.realpath(__file__), st.st_mode | stat.S_IEXEC)
+            st = os.stat(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui")
+            os.chmod(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", st.st_mode | stat.S_IEXEC)
+
             print("Script updated from " + self.version + " to " + new_version + ".")
 
 
