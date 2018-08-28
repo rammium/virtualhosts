@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.1.3"
+    version = "v1.2.0"
 
     def __init__(self):
         start = time.time()
@@ -321,7 +321,13 @@ class VirtualHosts:
             with open(repo_temp_dir + "/vh.py", "r") as new_script_file:
                 new_script = new_script_file.read()
 
+            with open(repo_temp_dir + "/vh-gui.py", "r") as new_script_file:
+                new_gui_script = new_script_file.read()
+
             with open(os.path.realpath(__file__), "w") as old_script_file:
+                old_script_file.write(new_script)
+
+            with open(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui.py", "w") as old_script_file:
                 old_script_file.write(new_script)
 
             temp.close()
