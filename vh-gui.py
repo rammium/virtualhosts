@@ -90,6 +90,9 @@ class VirtualHostsGui:
         self.window.mainloop()
 
     def clone(self):
+        if not self.list.curselection():
+            return
+
         self.cloneWindow = Tkinter.Tk()
         self.cloneWindow.title("Cloning...")
         self.cloneWindow.resizable(0, 0)
