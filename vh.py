@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.1.2"
+    version = "v1.1.3"
 
     def __init__(self):
         start = time.time()
@@ -47,7 +47,7 @@ class VirtualHosts:
         createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
         createparser.add_argument('-db', '--database', help='will create a database using the specified name')
         createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
-        createparser.add_argument('-cd', '--clone-dev', help='will run the "wp clonedev start" command', action='store_true')
+        createparser.add_argument('-cd', '--clone-dev', help='will run the "wp clonedev start" command', nargs='?', const="none")
         createparser.add_argument('-i', '--install', help='will run "composer install"', action='store_true')
         createparser.add_argument('-sr', '--skip-reload', help='will skip reloading apache', action='store_true')
 
@@ -217,15 +217,19 @@ class VirtualHosts:
                 env_contents = env_contents.replace("example.com", vhost_name + ".lo")
 
                 if self.args.clone_dev:
-                    ssh_path_flag = True
-                    while ssh_path_flag:
-                        ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
-                        ssh_path = ssh_path.replace(" ", "")
+                    ssh_path = ""
+                    if self.args.clone_dev == "none":
+                        ssh_path_flag = True
+                        while ssh_path_flag:
+                            ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
+                            ssh_path = ssh_path.replace(" ", "")
 
-                        ssh_path_ok = raw_input("Is '" + ssh_path + "' correct? [Y/n]: ")
+                            ssh_path_ok = raw_input("Is '" + ssh_path + "' correct? [Y/n]: ")
 
-                        if ssh_path_ok == "y" or ssh_path_ok == "Y" or ssh_path_ok == "":
-                            ssh_path_flag = False
+                            if ssh_path_ok == "y" or ssh_path_ok == "Y" or ssh_path_ok == "":
+                                ssh_path_flag = False
+                    else:
+                        ssh_path = self.args.clone_dev
 
                     env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + self.config.options["ssh_alias"] + ":" + self.config.options["ssh_port"] + self.config.options["ssh_path_prefix"] + "/" + ssh_path + "'")
 
