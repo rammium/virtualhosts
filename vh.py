@@ -22,7 +22,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.1.1"
+    version = "v1.1.2"
 
     def __init__(self):
         start = time.time()
@@ -49,6 +49,7 @@ class VirtualHosts:
         createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
         createparser.add_argument('-cd', '--clone-dev', help='will run the "wp clonedev start" command', action='store_true')
         createparser.add_argument('-i', '--install', help='will run "composer install"', action='store_true')
+        createparser.add_argument('-sr', '--skip-reload', help='will skip reloading apache', action='store_true')
 
         deleteparser = subparsers.add_parser('delete', help='deletes a virtualhost')
         deleteparser.add_argument('alias', help='specify the alias')
@@ -238,8 +239,9 @@ class VirtualHosts:
             subprocess.check_call(("wp core install --url=http://" + vhost_name + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhost_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             subprocess.check_call("wp clonedev start".split(), cwd=vhost_path)
 
-        print("Reloading apache (requires sudo access)...")
-        subprocess.check_call(self.config.options["apache_reload_command"].split())
+        if not self.args.skip_reload:
+            print("Reloading apache (requires sudo access)...")
+            subprocess.check_call(self.config.options["apache_reload_command"].split())
 
         print("Virtualhost " + vhost_name + ".lo created! URL: http://" + vhost_name + ".lo/")
 
