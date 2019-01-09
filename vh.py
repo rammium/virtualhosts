@@ -1,5 +1,13 @@
 #!/usr/bin/python
-import sys
+from includes.User import User
+from includes.SkeletonHandler import SkeletonHandler
+from includes.ConfigHandler import ConfigHandler
+from includes.VDBHandler import VDBHandler
+from includes.Vhost import Vhost
+from shutil import copyfile
+from shutil import rmtree
+from distutils.version import LooseVersion
+
 import os.path
 import subprocess
 import urllib
@@ -7,15 +15,8 @@ import json
 import zipfile
 import tempfile
 import argparse
-import ConfigParser
-import pwd
-import grp
 import time
 import stat
-from shutil import copyfile
-from shutil import rmtree
-from os import walk
-from distutils.version import LooseVersion
 
 
 class VirtualHosts:
@@ -24,7 +25,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.2.3"
+    version = "v1.2.4"
 
     def __init__(self):
         start = time.time()
@@ -349,202 +350,5 @@ class VirtualHosts:
 
             print("Script updated from " + self.version + " to " + new_version + ".")
 
-
-class SkeletonHandler:
-    path = None
-    user = None
-    skeletons = []
-
-    def __init__(self, skeletons, path, user):
-        self.path = path
-        self.user = user
-        self.skeletons = skeletons
-
-        self.update()
-
-    def add(self, name):
-        self.skeletons.append(name)
-
-    def update(self):
-        if not os.path.exists(self.path) or not os.path.isdir(self.path):
-            os.makedirs(self.path)
-            os.chown(self.path, self.user.uid, self.user.gid)
-
-        for skeleton in self.skeletons:
-            path = self.get_path(skeleton)
-
-            if not os.path.exists(path) or not os.path.isfile(path):
-                response = urllib.urlopen("https://raw.githubusercontent.com/rammium/virtualhosts/master/skeletons/skeleton-" + skeleton + ".conf")
-                with open(path, "w+") as skeleton_file:
-                    skeleton_file.write(response.read())
-                os.chown(path, self.user.uid, self.user.gid)
-                print("- Updated " + skeleton + " skeleton")
-
-    def get_path(self, name):
-        return self.path + "/skeleton-" + name + ".conf"
-
-class Skeleton:
-    name = None
-
-    def __init__(self, name):
-        self.name = name
-
-class User:
-    home_dir = None
-    name = None
-    uid = None
-    gid = None
-
-    def __init__(self):
-        self.name = os.environ['SUDO_USER'] if os.environ.has_key('SUDO_USER') else os.environ['USER']
-        self.uid = pwd.getpwnam(self.name).pw_uid
-        self.gid = grp.getgrnam("admin").gr_gid
-        self.home_dir = os.path.expanduser("~")
-
-class ConfigHandler:
-    directory_path = None
-    path = None
-    options = {}
-    user = None
-
-    def __init__(self, user):
-        self.user = user
-        self.directory_path = "/usr/local/etc/virtualhosts"
-        self.path = self.directory_path + "/config.ini"
-
-        if not os.path.exists(self.directory_path) or not os.path.isdir(self.directory_path):
-            os.makedirs(self.directory_path)
-            os.chown(self.directory_path, self.user.uid, self.user.gid)
-
-        if not os.path.exists(self.path) or not os.path.isfile(self.path):
-            print("No config file found. Creating it...")
-            self.create_config()
-            print("Config file created at: " + self.path)
-
-        self.read_config()
-
-    def read_config(self):
-        config = ConfigParser.RawConfigParser()
-        config.read(self.path)
-        self.options["mysql_user"] = config.get("MySQL", "mysql_user")
-        self.options["mysql_pass"] = config.get("MySQL", "mysql_pass")
-        self.options["mysql_host"] = config.get("MySQL", "mysql_host")
-        self.options["ssh_alias"] = config.get("WP-CLI", "ssh_alias")
-        self.options["ssh_port"] = config.get("WP-CLI", "ssh_port")
-        self.options["ssh_path_prefix"] = config.get("WP-CLI", "ssh_path_prefix")
-        self.options["webroot_path"] = config.get("General", "webroot_path")
-        self.options["apache_config_dir"] = config.get("General", "apache_config_dir")
-        self.options["apache_reload_command"] = config.get("General", "apache_reload_command")
-        self.options["devs_json_url"] = config.get("General", "devs_json_url")
-        self.options["webroot_path"] = self.options["webroot_path"].replace("%HOME_DIR%", self.user.home_dir)
-
-    def create_config(self):
-        config = ConfigParser.RawConfigParser(allow_no_value=True)
-        config.add_section("General")
-        config.add_section("MySQL")
-        config.add_section("WP-CLI")
-        config.set("General", "; For the webroot_path you can use the %HOME_DIR% string which will be replaced with your actual home directory path (example: %HOME_DIR%/Sites/)")
-        config.set("General", "; IMPORTANT: All the paths in this section must end with a slash ('/') and must be absolute paths!")
-        config.set("General", "webroot_path", "%HOME_DIR%/Sites/")
-        config.set("General", "apache_config_dir", "/usr/local/etc/httpd/")
-        config.set("General", "apache_reload_command", "sudo apachectl -k graceful")
-        config.set("General", "devs_json_url", "")
-        config.set("MySQL", "mysql_user", "")
-        config.set("MySQL", "mysql_pass", "")
-        config.set("MySQL", "mysql_host", "localhost")
-        config.set("WP-CLI", "ssh_alias", "dresden")
-        config.set("WP-CLI", "ssh_port", "2323")
-        config.set("WP-CLI", "ssh_path_prefix", "/home/wp-dev")
-
-        with open(self.path, "wb") as config_file:
-            config.write(config_file)
-        os.chown(self.path, self.user.uid, self.user.gid)
-
-class VDBHandler:
-    directory_path = None
-    path = None
-    user = None
-    vhosts = []
-
-    def __init__(self, user):
-        self.user = user
-        self.directory_path = "/usr/local/etc/virtualhosts"
-        self.path = self.directory_path + "/vhosts_database.ini"
-
-        if not os.path.exists(self.path) or not os.path.isfile(self.path):
-            print("No config file found. Creating it...")
-            self.create_vhosts_database()
-            print("Config file created at: " + self.path)
-
-        self.read_vhosts_database()
-
-    def get_vhost(self, alias):
-        if self.exists(alias):
-            return self.vhosts[self.vhosts.index(alias)]
-        return False
-
-    def exists(self, alias):
-        try:
-            self.vhosts.index(alias)
-        except ValueError:
-            return False
-        return True
-
-    def remove_vhost(self, alias):
-        if not self.exists(alias):
-            print("Error: Alias not found.")
-            exit(1)
-
-        config = ConfigParser.RawConfigParser(allow_no_value=True)
-        config.read(self.path)
-        config.remove_section(alias)
-
-        with open(self.path, "w") as config_file:
-            config.write(config_file)
-
-    def add_vhost(self, vhost):
-        self.vhosts.append(vhost)
-        config = ConfigParser.RawConfigParser(allow_no_value=True)
-        config.add_section(vhost.alias)
-        config.set(vhost.alias, "domain", vhost.domain)
-        config.set(vhost.alias, "path", vhost.path)
-        config.set(vhost.alias, "type", vhost.type)
-        config.set(vhost.alias, "database", vhost.database)
-
-        with open(self.path, "a") as config_file:
-            config.write(config_file)
-
-    def read_vhosts_database(self):
-        config = ConfigParser.RawConfigParser()
-        config.read(self.path)
-
-        for vhost in config.sections():
-            domain = config.get(vhost, "domain")
-            path = config.get(vhost, "path")
-            type = config.get(vhost, "type")
-            database = config.get(vhost, "database")
-            self.vhosts.append(Vhost(vhost, domain, path, type, database))
-
-    def create_vhosts_database(self):
-        f = open(self.path, "w")
-        f.close()
-        os.chown(self.path, self.user.uid, self.user.gid)
-
-class Vhost:
-    alias = None
-    domain = None
-    path = None
-    type = None
-    database = None
-
-    def __init__(self, alias, domain, path, type = "main", database = ""):
-        self.alias = alias
-        self.domain = domain
-        self.path = path
-        self.type = type
-        self.database = database
-
-    def __eq__(self, alias):
-        return self.alias == alias
 
 VirtualHosts()
