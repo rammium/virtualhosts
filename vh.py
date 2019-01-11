@@ -73,14 +73,14 @@ class VirtualHosts:
 
     def handle_command(self):
         commands = {
-            "skeleton-update" : self.skeleton_update,
-            "check-update" : self.check_update,
-            "list" : self.list,
-            "create" : self.create,
-            "delete" : self.delete,
-            "update" : self.update,
-            "info" : self.info,
-            "reconfig" : self.reconfig,
+            "skeleton-update": self.skeleton_update,
+            "check-update": self.check_update,
+            "list": self.list,
+            "create": self.create,
+            "delete": self.delete,
+            "update": self.update,
+            "info": self.info,
+            "reconfig": self.reconfig,
         }
         commands[self.args.command]()
 
@@ -164,7 +164,7 @@ class VirtualHosts:
 
         if self.args.install:
             print("Running composer install...")
-            subprocess.check_call(("composer install").split(), cwd=vhost_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.check_call("composer install".split(), cwd=vhost_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         vhost_type = 'main'
 
@@ -268,7 +268,7 @@ class VirtualHosts:
         print("Deleting virtualhost...")
 
         if not os.path.isfile(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_domain + ".lo.conf"):
-            print("Warning: Cannot find the virtualhost config file. Will be skipped.")
+            print("Warning: Could not find the virtualhost config file. Will be skipped.")
         else:
             os.remove(self.config.options["apache_config_dir"] + "extra/vhosts/" + vhost_domain + ".lo.conf")
 
