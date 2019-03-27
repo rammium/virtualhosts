@@ -12,9 +12,9 @@ Features:
 - Uses configurable skeleton files for virtualhost config which can be auto updated.
 - Auto updater.
 
-For a list of all available commands run `$ sudo vh -h`.
+For a list of all available commands run `$ vh -h`.
 
-For the available flags for a specific command run `$ sudo vh <command> -h`.
+For the available flags for a specific command run `$ vh <command> -h`.
 
 ## Example installation
 Download the script `vh.py` from https://github.com/rammium/virtualhosts/releases/latest to your home directory.
