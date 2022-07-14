@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!python
 from shutil import copyfile
 from shutil import rmtree
 from distutils.version import LooseVersion
@@ -23,7 +23,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.2.5"
+    version = "v1.3.0"
 
     def __init__(self):
         start = time.time()
@@ -375,7 +375,7 @@ class ConfigHandler:
 
     def __init__(self, user):
         self.user = user
-        self.directory_path = "/usr/local/etc/virtualhosts"
+        self.directory_path = "/opt/homebrew/etc/virtualhosts"
         self.path = self.directory_path + "/config.ini"
 
         if not os.path.exists(self.directory_path) or not os.path.isdir(self.directory_path):
@@ -412,8 +412,8 @@ class ConfigHandler:
         config.set("General", "; For the webroot_path you can use the %HOME_DIR% string which will be replaced with your actual home directory path (example: %HOME_DIR%/Sites/)")
         config.set("General", "; IMPORTANT: All the paths in this section must end with a slash ('/') and must be absolute paths!")
         config.set("General", "webroot_path", "%HOME_DIR%/Sites/")
-        config.set("General", "apache_config_dir", "/usr/local/etc/httpd/")
-        config.set("General", "apache_reload_command", "sudo apachectl -k graceful")
+        config.set("General", "apache_config_dir", "/opt/homebrew/etc/httpd/")
+        config.set("General", "apache_reload_command", "brew services restart httpd")
         config.set("General", "devs_json_url", "")
         config.set("MySQL", "mysql_user", "")
         config.set("MySQL", "mysql_pass", "")
@@ -435,7 +435,7 @@ class VDBHandler:
 
     def __init__(self, user):
         self.user = user
-        self.directory_path = "/usr/local/etc/virtualhosts"
+        self.directory_path = "/opt/homebrew/etc/virtualhosts"
         self.path = self.directory_path + "/vhosts_database.ini"
 
         if not os.path.exists(self.path) or not os.path.isfile(self.path):
