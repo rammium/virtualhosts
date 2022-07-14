@@ -247,7 +247,7 @@ class VirtualHosts:
             subprocess.check_call("wp clonedev start".split(), cwd=vhost_path)
 
         if not self.args.skip_reload:
-            print("Reloading apache (requires sudo access)...")
+            print("Reloading apache...")
             subprocess.check_call(self.config.options["apache_reload_command"].split())
 
         print("Virtualhost " + vhost_name + ".lo created! URL: http://" + vhost_name + ".lo/")
@@ -289,16 +289,12 @@ class VirtualHosts:
                 print("Dropping the database...")
                 subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost.database).split())
 
-        print("Reloading apache (requires sudo access)...")
+        print("Reloading apache...")
         subprocess.check_call(self.config.options["apache_reload_command"].split())
 
         print("Virtualhost " + vhost_domain + ".lo deleted!")
 
     def update(self):
-        if os.geteuid() != 0:
-            print("Updating the script requires root privileges. Please run this command using sudo.")
-            exit(1)
-
         response = urllib.urlopen("https://api.github.com/repos/rammium/virtualhosts/releases/latest")
         data = json.loads(response.read())
 
