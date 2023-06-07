@@ -23,7 +23,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.3.0"
+    version = "v1.3.1"
 
     def __init__(self):
         start = time.time()
@@ -213,11 +213,11 @@ class VirtualHosts:
                 with open(vhost_path + "/.env") as f:
                     env_contents = f.read()
 
-                env_contents = env_contents.replace("database_name", db_name)
-                env_contents = env_contents.replace("database_user", self.config.options["mysql_user"])
-                env_contents = env_contents.replace("database_password", self.config.options["mysql_pass"])
-                env_contents = env_contents.replace("database_host", self.config.options["mysql_host"])
-                env_contents = env_contents.replace("example.com", vhost_name + ".lo")
+                env_contents = env_contents.replace("DB_NAME=wordpress", "DB_NAME=" + db_name)
+                env_contents = env_contents.replace("DB_USER=wordpress", "DB_USER=" + self.config.options["mysql_user"])
+                env_contents = env_contents.replace("DB_PASSWORD=wordpress", "DB_PASSWORD=" + self.config.options["mysql_pass"])
+                env_contents = env_contents.replace("DB_HOST=database", "DB_HOST=" + self.config.options["mysql_host"])
+                env_contents = env_contents.replace("WP_HOME=http://" + vhost_name + ".lndo.site", "WP_HOME=http://" + vhost_name + ".lo")
 
                 if self.args.clone_dev:
                     ssh_path = ""
