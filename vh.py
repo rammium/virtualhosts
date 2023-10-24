@@ -23,7 +23,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.3.2"
+    version = "v1.3.3"
 
     def __init__(self):
         start = time.time()
