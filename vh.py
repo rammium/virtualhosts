@@ -1,4 +1,4 @@
-#!python
+#!python2
 from shutil import copyfile
 from shutil import rmtree
 from distutils.version import LooseVersion
