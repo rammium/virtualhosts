@@ -23,7 +23,7 @@ class VirtualHosts:
     config = None
     skeletons = None
     vhosts = None
-    version = "v1.3.3"
+    version = "v1.4.0"
 
     def __init__(self):
         start = time.time()
@@ -48,7 +48,6 @@ class VirtualHosts:
         createparser.add_argument('-s', '--symfony', help='will set the root to /public', action='store_true')
         createparser.add_argument('-db', '--database', help='will create a database using the specified name')
         createparser.add_argument('-cr', '--clone-repo', help='will clone the specified repo')
-        createparser.add_argument('-cd', '--clone-dev', help='will run the "wp clonedev start" command', nargs='?', const="none")
         createparser.add_argument('-i', '--install', help='will run "composer install"', action='store_true')
         createparser.add_argument('-sr', '--skip-reload', help='will skip reloading apache', action='store_true')
 
@@ -176,9 +175,6 @@ class VirtualHosts:
 
         self.vhosts.add_vhost(Vhost(self.args.alias, vhost_name, vhost_addon_path, vhost_type, db_name))
 
-        if (self.args.clone_dev and not self.args.database) or (self.args.clone_dev and not self.args.bedrock):
-            print("Warning: Cloning the development site requires the -b/--bedrock and -d/--database flags. Cloning will be skipped.")
-
         print("Creating virtualhost file...")
         with open(self.skeletons.get_path(vhost_type)) as f:
             new_vhost = f.read()
@@ -196,13 +192,9 @@ class VirtualHosts:
 
         if self.args.database:
             print("Creating database...")
-            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " create " + db_name).split())
+            subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " --skip-ssl create " + db_name).split())
 
             if self.args.bedrock:
-                if self.args.clone_dev and not os.path.exists(vhost_path + "/wp-cli/clonedev/command.php"):
-                    self.args.clone_dev = False
-                    print("Warning: Development site cannot be cloned because the WP-CLI command was not found. Cloning will be skipped.")
-
                 print("Generating env file...")
                 if os.path.exists(vhost_path + "/.env.example"):
                     copyfile(vhost_path + "/.env.example", vhost_path + "/.env")
@@ -219,32 +211,10 @@ class VirtualHosts:
                 env_contents = env_contents.replace("DB_HOST='database'", "DB_HOST='" + self.config.options["mysql_host"] + "'")
                 env_contents = env_contents.replace("WP_HOME='https://" + vhost_name + ".lndo.site'", "WP_HOME='http://" + vhost_name + ".lo'")
 
-                if self.args.clone_dev:
-                    ssh_path = ""
-                    if self.args.clone_dev == "none":
-                        ssh_path_flag = True
-                        while ssh_path_flag:
-                            ssh_path = raw_input("Enter development site domain (example: wp-test.dpdev.ch): ")
-                            ssh_path = ssh_path.replace(" ", "")
-
-                            ssh_path_ok = raw_input("Is '" + ssh_path + "' correct? [Y/n]: ")
-
-                            if ssh_path_ok == "y" or ssh_path_ok == "Y" or ssh_path_ok == "":
-                                ssh_path_flag = False
-                    else:
-                        ssh_path = self.args.clone_dev
-
-                    env_contents = env_contents.replace("DEV_SSH_STRING=''", "DEV_SSH_STRING='" + self.config.options["ssh_alias"] + ":" + self.config.options["ssh_port"] + self.config.options["ssh_path_prefix"] + "/" + ssh_path + "'")
-
                 with open(vhost_path + "/.env", "w+") as env_file:
                     env_file.write(env_contents)
 
                 os.chown(vhost_path + "/.env", self.user.uid, self.user.gid)
-
-        if self.args.clone_dev and self.args.bedrock and self.args.database:
-            print("Cloning development site...")
-            subprocess.check_call(("wp core install --url=http://" + vhost_name + ".lo/ --title=Local --admin_user=admin --admin_email=admin@admin.lo --allow-root").split(), cwd=vhost_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            subprocess.check_call("wp clonedev start".split(), cwd=vhost_path)
 
         if not self.args.skip_reload:
             print("Reloading apache...")
@@ -287,7 +257,7 @@ class VirtualHosts:
 
             if self.args.database and vhost.database:
                 print("Dropping the database...")
-                subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " drop " + vhost.database).split())
+                subprocess.check_call(("mysqladmin --user=" + self.config.options["mysql_user"] + " --password=" + self.config.options["mysql_pass"] + " --skip-ssl drop " + vhost.database).split())
 
         print("Reloading apache...")
         subprocess.check_call(self.config.options["apache_reload_command"].split())
@@ -324,23 +294,14 @@ class VirtualHosts:
             with open(repo_temp_dir + "/vh.py", "r") as new_script_file:
                 new_script = new_script_file.read()
 
-            with open(repo_temp_dir + "/vh-gui.py", "r") as new_script_file:
-                new_gui_script = new_script_file.read()
-
             with open(os.path.realpath(__file__), "w") as old_script_file:
                 old_script_file.write(new_script)
-
-            with open(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", "w") as old_script_file:
-                old_script_file.write(new_gui_script)
 
             temp.close()
 
             os.chown(os.path.realpath(__file__), self.user.uid, self.user.gid)
-            os.chown(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", self.user.uid, self.user.gid)
             st = os.stat(os.path.realpath(__file__))
             os.chmod(os.path.realpath(__file__), st.st_mode | stat.S_IEXEC)
-            st = os.stat(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui")
-            os.chmod(os.path.dirname(os.path.realpath(__file__)) + "/vh-gui", st.st_mode | stat.S_IEXEC)
 
             print("Script updated from " + self.version + " to " + new_version + ".")
 
